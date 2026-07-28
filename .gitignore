@@ -39,3 +39,9 @@ build/
 # Test coverage
 coverage/
 .nyc_output/
+# Firebase
+.firebase/
+functions/node_modules/
+functions/index.js
+functions/.env
+functions/.env.*

@@ -24,7 +24,9 @@ app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 
 export default app;
 
-if (env.isProduction) {
+// K_SERVICE is set on Cloud Run / Cloud Functions (2nd gen): there the platform
+// invokes the exported app instead of us binding a port.
+if (env.isProduction && !process.env.K_SERVICE) {
   const { serve } = await import("@hono/node-server");
   const { serveStaticFiles } = await import("./lib/vite");
   serveStaticFiles(app);

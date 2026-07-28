@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && esbuild api/boot.ts --platform=node --bundle --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
+    "build:functions": "esbuild functions/index.ts --platform=node --target=node20 --bundle --format=esm --outfile=functions/index.js --external:firebase-functions --external:firebase-admin --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "NODE_ENV=production node dist/boot.js",
@@ -95,6 +96,7 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
+    "firebase-tools": "^15.24.0",
     "globals": "^16.5.0",
     "kimi-plugin-inspect-react": "^1.0.3",
     "postcss": "^8.5.6",
