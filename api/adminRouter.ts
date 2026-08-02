@@ -1,19 +1,6 @@
 import { z } from "zod";
 import { createRouter, adminQuery } from "./middleware";
-import { getDb } from "./queries/connection";
-import {
-  bookings,
-  customers,
-  customerNotes,
-  notifications,
-  repairPrices,
-  products,
-  parts,
-  messages,
-  subscribers,
-  blogPosts,
-} from "@db/schema";
-import { eq, desc, like, or, sql, gte } from "drizzle-orm";
+import { store } from "./queries/store";
 
 const bookingInput = z.object({
   id: z.number(),
@@ -30,45 +17,26 @@ const bookingInput = z.object({
 export const adminRouter = createRouter({
   /* ---------- dashboard stats ---------- */
   stats: adminQuery.query(async () => {
-    const db = getDb();
+    const all = await store.bookings();
     const today = new Date().toISOString().slice(0, 10);
-    const [todayCount] = await db
-      .select({ n: sql<number>`count(*)` })
-      .from(bookings)
-      .where(eq(bookings.date, today));
-    const [pending] = await db
-      .select({ n: sql<number>`count(*)` })
-      .from(bookings)
-      .where(eq(bookings.status, "pending"));
-    const [completed] = await db
-      .select({ n: sql<number>`count(*)` })
-      .from(bookings)
-      .where(eq(bookings.status, "completed"));
-    const [customerCount] = await db
-      .select({ n: sql<number>`count(*)` })
-      .from(customers);
-    const lowStock = await db
-      .select()
-      .from(parts)
-      .where(sql`${parts.stock} <= ${parts.lowStockAt}`);
-    const recentBookings = await db
-      .select()
-      .from(bookings)
-      .orderBy(desc(bookings.createdAt))
-      .limit(8);
-    const unreadMessages = await db
-      .select({ n: sql<number>`count(*)` })
-      .from(messages)
-      .where(eq(messages.read, false));
+    const todayBookings = all.filter((b) => b.date === today).length;
+    const pendingBookings = all.filter((b) => b.status === "pending").length;
+    const completedRepairs = all.filter((b) => b.status === "completed").length;
+    const customers = (await store.customers()).length;
+    const lowStock = await store.lowStock();
+    const recentBookings = all
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 8);
+    const unreadMessages = await store.unreadMessages();
     return {
-      todayBookings: todayCount?.n ?? 0,
-      pendingBookings: pending?.n ?? 0,
-      completedRepairs: completed?.n ?? 0,
-      customers: customerCount?.n ?? 0,
+      todayBookings,
+      pendingBookings,
+      completedRepairs,
+      customers,
       lowStockCount: lowStock.length,
       lowStock,
       recentBookings,
-      unreadMessages: unreadMessages[0]?.n ?? 0,
+      unreadMessages,
     };
   }),
 
@@ -76,15 +44,15 @@ export const adminRouter = createRouter({
   bookings: adminQuery
     .input(z.object({ status: z.string().optional() }).optional())
     .query(async ({ input }) => {
-      const db = getDb();
-      if (input?.status && input.status !== "all") {
-        return db
-          .select()
-          .from(bookings)
-          .where(eq(bookings.status, input.status as never))
-          .orderBy(desc(bookings.date), desc(bookings.timeSlot));
-      }
-      return db.select().from(bookings).orderBy(desc(bookings.date), desc(bookings.timeSlot));
+      const all = await store.bookings();
+      const filtered = input?.status && input.status !== "all"
+        ? all.filter((b) => b.status === input.status)
+        : all;
+      return filtered.sort((a, b) => {
+        const d = b.date.localeCompare(a.date);
+        if (d !== 0) return d;
+        return b.timeSlot.localeCompare(a.timeSlot);
+      });
     }),
 
   updateBooking: adminQuery.input(bookingInput).mutation(async ({ input }) => {
@@ -96,20 +64,21 @@ export const adminRouter = createRouter({
     if (data.priceEstimate !== undefined) set.priceEstimate = data.priceEstimate;
     if (data.warrantyUntil) set.warrantyUntil = data.warrantyUntil;
     if (data.notes !== undefined) set.notes = data.notes;
+
     // auto warranty: 1 year from completion for screen repairs, 90 days otherwise
     if (data.status === "completed" && !data.warrantyUntil) {
-      const b = await getDb().query.bookings.findFirst({ where: eq(bookings.id, id) });
+      const b = await store.getBooking(id);
       const days = b?.repairType.toLowerCase().includes("screen") ? 365 : 90;
       set.warrantyUntil = new Date(Date.now() + days * 864e5).toISOString().slice(0, 10);
     }
-    await getDb().update(bookings).set(set).where(eq(bookings.id, id));
+    await store.updateBooking(id, set as never);
     return { ok: true };
   }),
 
   deleteBooking: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      await getDb().delete(bookings).where(eq(bookings.id, input.id));
+      await store.deleteBooking(input.id);
       return { ok: true };
     }),
 
@@ -124,7 +93,7 @@ export const adminRouter = createRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      await getDb().insert(notifications).values({
+      await store.addNotification({
         bookingId: input.bookingId ?? null,
         customerId: input.customerId ?? null,
         channel: input.channel,
@@ -137,38 +106,30 @@ export const adminRouter = createRouter({
   customers: adminQuery
     .input(z.object({ q: z.string().optional() }).optional())
     .query(async ({ input }) => {
-      const db = getDb();
+      const all = await store.customers();
       if (input?.q) {
-        const q = `%${input.q}%`;
-        return db
-          .select()
-          .from(customers)
-          .where(or(like(customers.name, q), like(customers.phone, q), like(customers.email, q)))
-          .orderBy(desc(customers.createdAt));
+        const q = input.q.toLowerCase();
+        return all.filter(
+          (c) =>
+            c.name.toLowerCase().includes(q) ||
+            c.phone.toLowerCase().includes(q) ||
+            (c.email?.toLowerCase() ?? "").includes(q),
+        );
       }
-      return db.select().from(customers).orderBy(desc(customers.createdAt));
+      return all;
     }),
 
   customerDetail: adminQuery
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
-      const db = getDb();
-      const customer = await db.query.customers.findFirst({ where: eq(customers.id, input.id) });
-      const history = await db
-        .select()
-        .from(bookings)
-        .where(eq(bookings.customerId, input.id))
-        .orderBy(desc(bookings.createdAt));
-      const notes = await db
-        .select()
-        .from(customerNotes)
-        .where(eq(customerNotes.customerId, input.id))
-        .orderBy(desc(customerNotes.createdAt));
-      const comms = await db
-        .select()
-        .from(notifications)
-        .where(eq(notifications.customerId, input.id))
-        .orderBy(desc(notifications.createdAt));
+      const customer = await store.getCustomer(input.id);
+      if (!customer) {
+        throw new Error("Customer not found.");
+      }
+      const history = await store.bookingsByCustomer(input.id);
+      history.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const notes = await store.customerNotes(input.id);
+      const comms = await store.notifications(input.id);
       return { customer, history, notes, comms };
     }),
 
@@ -183,18 +144,19 @@ export const adminRouter = createRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      const db = getDb();
       if (input.id) {
-        await db
-          .update(customers)
-          .set({ name: input.name, phone: input.phone, email: input.email || null, notes: input.notes || null })
-          .where(eq(customers.id, input.id));
-      } else {
-        await db.insert(customers).values({
+        await store.updateCustomer(input.id, {
           name: input.name,
           phone: input.phone,
           email: input.email || null,
-          notes: input.notes || null,
+          notes: input.notes ?? null,
+        });
+      } else {
+        await store.createCustomer({
+          name: input.name,
+          phone: input.phone,
+          email: input.email || null,
+          notes: input.notes ?? null,
         });
       }
       return { ok: true };
@@ -203,20 +165,21 @@ export const adminRouter = createRouter({
   deleteCustomer: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      await getDb().delete(customers).where(eq(customers.id, input.id));
+      await store.deleteCustomer(input.id);
       return { ok: true };
     }),
 
   addNote: adminQuery
     .input(z.object({ customerId: z.number(), note: z.string().min(1) }))
     .mutation(async ({ input }) => {
-      await getDb().insert(customerNotes).values(input);
+      await store.addCustomerNote(input);
       return { ok: true };
     }),
 
   /* ---------- products ---------- */
   products: adminQuery.query(async () => {
-    return getDb().select().from(products).orderBy(desc(products.createdAt));
+    const all = await store.adminProducts();
+    return all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }),
 
   upsertProduct: adminQuery
@@ -234,35 +197,30 @@ export const adminRouter = createRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      const db = getDb();
-      const data = {
+      await store.upsertProduct({
+        id: input.id,
         name: input.name,
         kind: input.kind,
         subcategory: input.subcategory,
         price: input.price,
         stock: input.stock,
-        description: input.description || null,
-        badge: input.badge || null,
+        description: input.description ?? null,
+        badge: input.badge ?? null,
         active: input.active ?? true,
-      };
-      if (input.id) {
-        await db.update(products).set(data).where(eq(products.id, input.id));
-      } else {
-        await db.insert(products).values(data);
-      }
+      });
       return { ok: true };
     }),
 
   deleteProduct: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      await getDb().delete(products).where(eq(products.id, input.id));
+      await store.deleteProduct(input.id);
       return { ok: true };
     }),
 
   /* ---------- parts inventory ---------- */
   parts: adminQuery.query(async () => {
-    return getDb().select().from(parts).orderBy(parts.category, parts.name);
+    return store.parts();
   }),
 
   upsertPart: adminQuery
@@ -278,98 +236,104 @@ export const adminRouter = createRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      const db = getDb();
       const { id, ...data } = input;
-      if (id) {
-        await db.update(parts).set(data).where(eq(parts.id, id));
-      } else {
-        await db.insert(parts).values(data);
-      }
+      await store.upsertPart({ id, ...data });
       return { ok: true };
     }),
 
   deletePart: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      await getDb().delete(parts).where(eq(parts.id, input.id));
+      await store.deletePart(input.id);
       return { ok: true };
     }),
 
   /* ---------- pricing management ---------- */
   prices: adminQuery.query(async () => {
-    return getDb().select().from(repairPrices).orderBy(repairPrices.sortOrder);
+    return store.prices();
   }),
 
   updatePrice: adminQuery
     .input(z.object({ id: z.number(), priceLabel: z.string().min(1) }))
     .mutation(async ({ input }) => {
-      await getDb()
-        .update(repairPrices)
-        .set({ priceLabel: input.priceLabel })
-        .where(eq(repairPrices.id, input.id));
+      await store.updatePrice(input.id, input.priceLabel);
       return { ok: true };
     }),
 
   /* ---------- messages ---------- */
   messages: adminQuery.query(async () => {
-    return getDb().select().from(messages).orderBy(desc(messages.createdAt));
+    return store.messages();
   }),
 
   markRead: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
-      await getDb().update(messages).set({ read: true }).where(eq(messages.id, input.id));
+      await store.markMessageRead(input.id);
       return { ok: true };
     }),
 
   /* ---------- reports ---------- */
   reports: adminQuery.query(async () => {
-    const db = getDb();
-    const since = new Date(Date.now() - 180 * 864e5).toISOString().slice(0, 10);
-    const byStatus = await db
-      .select({ status: bookings.status, n: sql<number>`count(*)` })
-      .from(bookings)
-      .groupBy(bookings.status);
-    const byType = await db
-      .select({ repairType: bookings.repairType, n: sql<number>`count(*)` })
-      .from(bookings)
-      .groupBy(bookings.repairType)
-      .orderBy(desc(sql`count(*)`))
-      .limit(8);
-    const byDevice = await db
-      .select({ device: bookings.device, n: sql<number>`count(*)` })
-      .from(bookings)
-      .groupBy(bookings.device)
-      .orderBy(desc(sql`count(*)`))
-      .limit(8);
-    const byMonth = await db
-      .select({
-        month: sql<string>`date_format(${bookings.createdAt}, '%Y-%m')`,
-        n: sql<number>`count(*)`,
-      })
-      .from(bookings)
-      .where(gte(bookings.createdAt, new Date(since)))
-      .groupBy(sql`date_format(${bookings.createdAt}, '%Y-%m')`)
-      .orderBy(sql`date_format(${bookings.createdAt}, '%Y-%m')`);
-    const inventoryValue = await db
-      .select({ v: sql<number>`coalesce(sum(${parts.stock} * ${parts.costCents}), 0)` })
-      .from(parts);
-    const productSalesValue = await db
-      .select({ v: sql<number>`coalesce(sum(${products.price} * ${products.stock}), 0)` })
-      .from(products);
-    const [subscriberCount] = await db
-      .select({ n: sql<number>`count(*)` })
-      .from(subscribers);
-    const [postCount] = await db.select({ n: sql<number>`count(*)` }).from(blogPosts);
+    const all = await store.bookings();
+    const since = new Date(Date.now() - 180 * 864e5);
+
+    const byStatus = Object.entries(
+      all.reduce<Record<string, number>>((acc, b) => {
+        acc[b.status] = (acc[b.status] ?? 0) + 1;
+        return acc;
+      }, {}),
+    ).map(([status, n]) => ({ status, n }));
+
+    const byType = Object.entries(
+      all.reduce<Record<string, number>>((acc, b) => {
+        acc[b.repairType] = (acc[b.repairType] ?? 0) + 1;
+        return acc;
+      }, {}),
+    )
+      .map(([repairType, n]) => ({ repairType, n }))
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 8);
+
+    const byDevice = Object.entries(
+      all.reduce<Record<string, number>>((acc, b) => {
+        acc[b.device] = (acc[b.device] ?? 0) + 1;
+        return acc;
+      }, {}),
+    )
+      .map(([device, n]) => ({ device, n }))
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 8);
+
+    const monthMap = new Map<string, number>();
+    for (const b of all) {
+      const d = new Date(b.createdAt);
+      if (d >= since) {
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        monthMap.set(key, (monthMap.get(key) ?? 0) + 1);
+      }
+    }
+    const byMonth = Array.from(monthMap.entries())
+      .map(([month, n]) => ({ month, n }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    const parts = await store.parts();
+    const inventoryValueCents = parts.reduce((sum, p) => sum + p.stock * p.costCents, 0);
+
+    const products = await store.adminProducts();
+    const retailStockValueCents = products.reduce((sum, p) => sum + p.price * p.stock, 0);
+
+    const subscribers = (await store.subscribers()).length;
+    const blogPosts = (await store.blogList()).length;
+
     return {
       byStatus,
       byType,
       byDevice,
       byMonth,
-      inventoryValueCents: inventoryValue[0]?.v ?? 0,
-      retailStockValueCents: productSalesValue[0]?.v ?? 0,
-      subscribers: subscriberCount?.n ?? 0,
-      blogPosts: postCount?.n ?? 0,
+      inventoryValueCents,
+      retailStockValueCents,
+      subscribers,
+      blogPosts,
     };
   }),
 });

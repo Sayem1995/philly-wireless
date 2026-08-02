@@ -13,9 +13,10 @@
     "check": "tsc -b",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:seed": "esbuild scripts/seed.ts --platform=node --bundle --format=esm --outfile=scripts/seed.js --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\" && node scripts/seed.js",
+    "deploy:rules": "firebase deploy --only firestore:rules",
+    "deploy:hosting": "firebase deploy --only hosting",
+    "deploy:functions": "npm run build:functions && firebase deploy --only functions"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.965.0",
@@ -60,6 +61,8 @@
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "embla-carousel-react": "^8.6.0",
+    "firebase": "^12.17.0",
+    "firebase-admin": "^14.2.0",
     "framer-motion": "^12.42.2",
     "hono": "^4.8.3",
     "input-otp": "^1.4.2",

@@ -1,7 +1,7 @@
-import { trpc } from "@/providers/trpc";
 import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { LOGIN_PATH } from "@/const";
+import { useAuthContext } from "@/providers/AuthProvider";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -13,46 +13,37 @@ export function useAuth(options?: UseAuthOptions) {
     options ?? {};
 
   const navigate = useNavigate();
-
-  const utils = trpc.useUtils();
-
   const {
-    data: user,
+    user,
     isLoading,
-    error,
-    refetch,
-  } = trpc.auth.me.useQuery(undefined, {
-    staleTime: 1000 * 60 * 5,
-    retry: false,
-  });
-
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: async () => {
-      await utils.invalidate();
-      navigate(redirectPath);
-    },
-  });
-
-  const logout = useCallback(() => logoutMutation.mutate(), [logoutMutation]);
+    isAuthenticated,
+    isFirebaseReady,
+    logout,
+    refresh,
+  } = useAuthContext();
 
   useEffect(() => {
-    if (redirectOnUnauthenticated && !isLoading && !user) {
+    if (redirectOnUnauthenticated && !isLoading && !isAuthenticated) {
       const currentPath = window.location.pathname;
       if (currentPath !== redirectPath) {
         navigate(redirectPath);
       }
     }
-  }, [redirectOnUnauthenticated, isLoading, user, navigate, redirectPath]);
+  }, [redirectOnUnauthenticated, isLoading, isAuthenticated, navigate, redirectPath]);
+
+  const handleLogout = useCallback(() => {
+    void logout();
+  }, [logout]);
 
   return useMemo(
     () => ({
       user: user ?? null,
-      isAuthenticated: !!user,
-      isLoading: isLoading || logoutMutation.isPending,
-      error,
-      logout,
-      refresh: refetch,
+      isAuthenticated,
+      isLoading,
+      isFirebaseReady,
+      logout: handleLogout,
+      refresh,
     }),
-    [user, isLoading, logoutMutation.isPending, error, logout, refetch],
+    [user, isAuthenticated, isLoading, isFirebaseReady, handleLogout, refresh],
   );
 }

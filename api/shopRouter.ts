@@ -1,18 +1,7 @@
 import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware";
-import { getDb } from "./queries/connection";
-import {
-  repairPrices,
-  products,
-  blogPosts,
-  messages,
-  subscribers,
-  bookings,
-  customers,
-} from "@db/schema";
-import { eq, asc, and, ne, desc } from "drizzle-orm";
+import { store } from "./queries/store";
 import { TIME_SLOTS, STORE } from "@contracts/constants";
-import { notifications } from "@db/schema";
 import {
   sendEmail,
   bookingConfirmationHtml,
@@ -22,49 +11,33 @@ import {
 export const shopRouter = createRouter({
   /* ---------- repair pricing ---------- */
   prices: publicQuery.query(async () => {
-    return getDb()
-      .select()
-      .from(repairPrices)
-      .orderBy(asc(repairPrices.sortOrder));
+    return store.prices();
   }),
 
   /* ---------- products (devices + accessories) ---------- */
   products: publicQuery
     .input(z.object({ kind: z.string().optional() }).optional())
     .query(async ({ input }) => {
-      const db = getDb();
-      if (input?.kind) {
-        return db
-          .select()
-          .from(products)
-          .where(
-            and(eq(products.active, true), eq(products.kind, input.kind as never)),
-          );
-      }
-      return db.select().from(products).where(eq(products.active, true));
+      return store.products(input?.kind);
     }),
 
   /* ---------- blog ---------- */
   blogList: publicQuery.query(async () => {
-    return getDb()
-      .select({
-        id: blogPosts.id,
-        slug: blogPosts.slug,
-        title: blogPosts.title,
-        excerpt: blogPosts.excerpt,
-        tag: blogPosts.tag,
-        publishedAt: blogPosts.publishedAt,
-      })
-      .from(blogPosts)
-      .orderBy(desc(blogPosts.publishedAt));
+    const posts = await store.blogList();
+    return posts.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      title: p.title,
+      excerpt: p.excerpt,
+      tag: p.tag,
+      publishedAt: p.publishedAt,
+    }));
   }),
 
   blogBySlug: publicQuery
     .input(z.object({ slug: z.string() }))
     .query(async ({ input }) => {
-      return getDb().query.blogPosts.findFirst({
-        where: eq(blogPosts.slug, input.slug),
-      });
+      return store.blogBySlug(input.slug);
     }),
 
   /* ---------- contact form ---------- */
@@ -78,7 +51,12 @@ export const shopRouter = createRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      await getDb().insert(messages).values(input);
+      await store.createMessage({
+        name: input.name,
+        email: input.email,
+        phone: input.phone ?? null,
+        message: input.message,
+      });
       return { ok: true };
     }),
 
@@ -86,10 +64,7 @@ export const shopRouter = createRouter({
   subscribe: publicQuery
     .input(z.object({ email: z.string().email() }))
     .mutation(async ({ input }) => {
-      await getDb()
-        .insert(subscribers)
-        .values({ email: input.email })
-        .onDuplicateKeyUpdate({ set: { email: input.email } });
+      await store.subscribe(input.email);
       return { ok: true };
     }),
 
@@ -97,16 +72,10 @@ export const shopRouter = createRouter({
   slots: publicQuery
     .input(z.object({ date: z.string() })) // YYYY-MM-DD
     .query(async ({ input }) => {
-      const taken = await getDb()
-        .select({ timeSlot: bookings.timeSlot })
-        .from(bookings)
-        .where(
-          and(
-            eq(bookings.date, input.date),
-            ne(bookings.status, "cancelled"),
-          ),
-        );
-      const takenSet = new Set(taken.map((t) => t.timeSlot));
+      const taken = (await store.bookingsByDate(input.date))
+        .filter((b) => b.status !== "cancelled")
+        .map((b) => b.timeSlot);
+      const takenSet = new Set(taken);
       return TIME_SLOTS.map((s) => ({ slot: s, available: !takenSet.has(s) }));
     }),
 
@@ -126,58 +95,41 @@ export const shopRouter = createRouter({
       }),
     )
     .mutation(async ({ input }) => {
-      const db = getDb();
       // conflict check
-      const clash = await db
-        .select({ id: bookings.id })
-        .from(bookings)
-        .where(
-          and(
-            eq(bookings.date, input.date),
-            eq(bookings.timeSlot, input.timeSlot),
-            ne(bookings.status, "cancelled"),
-          ),
-        );
-      if (clash.length > 0) {
+      const clash = (await store.bookingsByDate(input.date)).find(
+        (b) => b.timeSlot === input.timeSlot && b.status !== "cancelled",
+      );
+      if (clash) {
         throw new Error("That time slot was just taken — please pick another.");
       }
+
       // link or create CRM customer
-      let customerId: number | undefined;
-      const existing = await db.query.customers.findFirst({
-        where: eq(customers.phone, input.phone),
-      });
-      if (existing) {
-        customerId = existing.id;
-      } else {
-        const [{ id }] = await db
-          .insert(customers)
-          .values({
-            name: input.customerName,
-            phone: input.phone,
-            email: input.email || null,
-          })
-          .$returningId();
-        customerId = id;
-      }
-      const [{ id: bookingId }] = await db
-        .insert(bookings)
-        .values({
-          customerId,
-          customerName: input.customerName,
+      const existingCustomer = await store.customerByPhone(input.phone);
+      const customer = existingCustomer ??
+        (await store.createCustomer({
+          name: input.customerName,
           phone: input.phone,
           email: input.email || null,
-          device: input.device,
-          repairType: input.repairType,
-          date: input.date,
-          timeSlot: input.timeSlot,
-          notes: input.notes || null,
-          priceEstimate: input.priceEstimate || null,
-        })
-        .$returningId();
+          notes: null,
+        }));
 
-      // --- email confirmations (delivered if SMTP is configured; always logged to CRM) ---
+      const booking = await store.createBooking({
+        customerId: customer.id,
+        customerName: input.customerName,
+        phone: input.phone,
+        email: input.email || null,
+        device: input.device,
+        repairType: input.repairType,
+        date: input.date,
+        timeSlot: input.timeSlot,
+        notes: input.notes || null,
+        priceEstimate: input.priceEstimate || null,
+        warrantyUntil: null,
+      });
+
+      // --- email confirmations (delivered if SMTP/SendGrid configured; otherwise logged to CRM) ---
       const details = {
-        id: bookingId,
+        id: booking.id,
         customerName: input.customerName,
         phone: input.phone,
         email: input.email || null,
@@ -188,36 +140,34 @@ export const shopRouter = createRouter({
         notes: input.notes || null,
       };
       try {
-        const logs: (typeof notifications.$inferInsert)[] = [];
         if (input.email) {
           const r = await sendEmail({
             to: input.email,
-            subject: `Booking confirmed #PPR-${bookingId} — ${STORE.name}`,
+            subject: `Booking confirmed #PPR-${booking.id} — ${STORE.name}`,
             html: bookingConfirmationHtml(details),
           });
-          logs.push({
-            bookingId,
-            customerId,
+          await store.addNotification({
+            bookingId: booking.id,
+            customerId: customer.id,
             channel: "email",
-            message: `Booking confirmation #PPR-${bookingId}${r.delivered ? " (sent)" : " (queued — SMTP not configured)"}`,
+            message: `Booking confirmation #PPR-${booking.id}${r.delivered ? " (sent)" : " (queued — SMTP not configured)"}`,
           });
         }
         const staff = await sendEmail({
           to: process.env.STAFF_EMAIL ?? STORE.email,
-          subject: `New booking #PPR-${bookingId}: ${input.device} — ${input.repairType}`,
+          subject: `New booking #PPR-${booking.id}: ${input.device} — ${input.repairType}`,
           html: staffNotificationHtml(details),
         });
-        logs.push({
-          bookingId,
-          customerId,
+        await store.addNotification({
+          bookingId: booking.id,
+          customerId: customer.id,
           channel: "email",
-          message: `Staff notification for #PPR-${bookingId}${staff.delivered ? " (sent)" : " (queued — SMTP not configured)"}`,
+          message: `Staff notification for #PPR-${booking.id}${staff.delivered ? " (sent)" : " (queued — SMTP not configured)"}`,
         });
-        await db.insert(notifications).values(logs);
       } catch (err) {
         console.error("[email] booking notification failed:", err);
       }
 
-      return { ok: true, bookingId };
+      return { ok: true, bookingId: booking.id };
     }),
 });
