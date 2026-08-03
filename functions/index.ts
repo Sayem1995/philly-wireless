@@ -1,5 +1,5 @@
 import { onRequest } from "firebase-functions/v2/https";
-import app from "../api/boot";
+import app from "../server/boot.js";
 
 // Bridge between the express-style (req, res) of Cloud Functions and the
 // Fetch API that Hono speaks. (`hono/firebase-functions` is not exported by

@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
-import { getDb } from "./firestore";
-import { env } from "../lib/env";
+import { getDb } from "./firestore.js";
+import { env } from "../lib/env.js";
 
 export type FirestoreUser = {
   id: number;

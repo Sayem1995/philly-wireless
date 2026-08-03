@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "./middleware";
-import { store } from "./queries/store";
-import { TIME_SLOTS, STORE } from "@contracts/constants";
+import { createRouter, publicQuery } from "./middleware.js";
+import { store } from "./queries/store.js";
+import { TIME_SLOTS, STORE } from "../contracts/constants.js";
 import {
   sendEmail,
   bookingConfirmationHtml,
   staffNotificationHtml,
-} from "./email";
+} from "./email.js";
 
 export const shopRouter = createRouter({
   /* ---------- repair pricing ---------- */

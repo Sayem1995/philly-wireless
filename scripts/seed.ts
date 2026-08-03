@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { getDb, Timestamp } from "../api/queries/firestore";
-import { nextId } from "../api/queries/ids";
+import { getDb, Timestamp } from "../server/queries/firestore.js";
+import { nextId } from "../server/queries/ids.js";
 
 /**
  * Seeds Firestore with the initial catalog for Philly Phone Repair.

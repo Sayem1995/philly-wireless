@@ -1,7 +1,7 @@
 import { getAuth } from "firebase-admin/auth";
-import { getDb } from "../queries/firestore";
-import type { FirestoreUser } from "../queries/users";
-import { findUserByUid, upsertUser } from "../queries/users";
+import { getDb } from "../queries/firestore.js";
+import type { FirestoreUser } from "../queries/users.js";
+import { findUserByUid, upsertUser } from "../queries/users.js";
 
 /**
  * Firebase Auth identity helpers.

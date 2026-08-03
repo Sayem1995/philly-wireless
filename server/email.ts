@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { STORE } from "@contracts/constants";
+import { STORE } from "../contracts/constants.js";
 
 /**
  * Email sender.

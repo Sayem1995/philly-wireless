@@ -1,6 +1,6 @@
 import type { Query } from "firebase-admin/firestore";
-import { getDb, toDate } from "./firestore";
-import { nextId } from "./ids";
+import { getDb, toDate } from "./firestore.js";
+import { nextId } from "./ids.js";
 
 /* ==================================================================
  * Firestore-backed data access for the shop + admin routers.

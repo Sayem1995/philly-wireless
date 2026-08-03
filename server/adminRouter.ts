@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { createRouter, adminQuery } from "./middleware";
-import { store } from "./queries/store";
+import { createRouter, adminQuery } from "./middleware.js";
+import { store } from "./queries/store.js";
 
 const bookingInput = z.object({
   id: z.number(),

@@ -1,6 +1,6 @@
 import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
-import type { FirestoreUser } from "./queries/users";
-import { authenticateFirebaseUser } from "./lib/firebase-auth";
+import type { FirestoreUser } from "./queries/users.js";
+import { authenticateFirebaseUser } from "./lib/firebase-auth.js";
 
 export type TrpcContext = {
   req: Request;

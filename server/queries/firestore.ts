@@ -1,6 +1,6 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
-import { env } from "../lib/env";
+import { env } from "../lib/env.js";
 
 let db: Firestore;
 
