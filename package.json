@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && esbuild server/boot.ts --platform=node --bundle --format=esm --outdir=dist --external:firebase-admin --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\" && esbuild server/boot.ts --platform=node --bundle --format=cjs --external:firebase-admin --outfile=api/_app.cjs",
+    "build": "vite build && esbuild server/boot.ts --platform=node --bundle --format=esm --outdir=dist --external:firebase-admin --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\" && esbuild server/boot.ts --platform=node --bundle --format=cjs --outfile=api/_app.cjs",
     "build:functions": "esbuild functions/index.ts --platform=node --target=node20 --bundle --format=esm --outfile=functions/index.js --external:firebase-functions --external:firebase-admin --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
     "lint": "eslint .",
     "preview": "vite preview",
