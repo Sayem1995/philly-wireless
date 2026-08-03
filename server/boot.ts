@@ -26,15 +26,19 @@ app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
 export default app;
 
 // Local / Docker boot: bind the Hono app. On Vercel the exported app is used
-// as a serverless function (api/index.ts), so this block is skipped there.
+// as a serverless function (api/index), so this block is skipped there.
 // K_SERVICE is set on Cloud Run / Cloud Functions (2nd gen).
+// Wrapped in an async IIFE so the module stays CJS-compatible if bundled
+// with --format=cjs (top-level await is ESM-only).
 if (!process.env.VERCEL && env.isProduction && !process.env.K_SERVICE) {
-  const { serve } = await import("@hono/node-server");
-  const { serveStaticFiles } = await import("./lib/vite.js");
-  serveStaticFiles(app);
+  void (async () => {
+    const { serve } = await import("@hono/node-server");
+    const { serveStaticFiles } = await import("./lib/vite.js");
+    serveStaticFiles(app);
 
-  const port = parseInt(process.env.PORT || "3000");
-  serve({ fetch: app.fetch, port }, () => {
-    console.log(`Server running on http://localhost:${port}/`);
-  });
+    const port = parseInt(process.env.PORT || "3000");
+    serve({ fetch: app.fetch, port }, () => {
+      console.log(`Server running on http://localhost:${port}/`);
+    });
+  })();
 }

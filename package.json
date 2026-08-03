@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && esbuild server/boot.ts --platform=node --bundle --format=esm --outdir=dist --external:firebase-admin --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
+    "build": "vite build && esbuild server/boot.ts --platform=node --bundle --format=esm --outdir=dist --external:firebase-admin --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\" && esbuild server/boot.ts --platform=node --bundle --format=cjs --external:firebase-admin --outfile=dist/vercel-app.cjs",
     "build:functions": "esbuild functions/index.ts --platform=node --target=node20 --bundle --format=esm --outfile=functions/index.js --external:firebase-functions --external:firebase-admin --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\"",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -13,7 +13,7 @@
     "check": "tsc -b",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:seed": "esbuild scripts/seed.ts --platform=node --bundle --format=esm --outfile=scripts/seed.js --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\" && node scripts/seed.js",
+    "db:seed": "esbuild scripts/seed.ts --platform=node --bundle --format=esm --external:firebase-admin --outfile=scripts/seed.js --banner:js=\"import { createRequire } from 'module';const require = createRequire(import.meta.url);\" && node scripts/seed.js",
     "deploy:rules": "firebase deploy --only firestore:rules",
     "deploy:hosting": "firebase deploy --only hosting",
     "deploy:functions": "npm run build:functions && firebase deploy --only functions"
