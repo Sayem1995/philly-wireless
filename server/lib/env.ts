@@ -1,26 +1,29 @@
 import "dotenv/config";
 
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value && process.env.NODE_ENV === "production") {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value ?? "";
+// NOTE: Never throw at module load. Vercel/Cloud Functions imports env.ts
+// immediately when the API function boots — throwing here would take down
+// even endpoints that don't touch Firestore (e.g. /api/trpc/ping).
+// Missing credentials are handled lazily when a Firestore/Auth call runs.
+function optional(name: string): string {
+  return process.env[name] ?? "";
 }
 
 export const env = {
-  appId: process.env.APP_ID ?? "",
-  appSecret: process.env.APP_SECRET ?? "",
+  appId: optional("APP_ID"),
+  appSecret: optional("APP_SECRET"),
   isProduction: process.env.NODE_ENV === "production",
-  databaseUrl: process.env.DATABASE_URL ?? "",
-  kimiAuthUrl: process.env.KIMI_AUTH_URL ?? "",
-  kimiOpenUrl: process.env.KIMI_OPEN_URL ?? "",
-  ownerUnionId: process.env.OWNER_UNION_ID ?? "",
+  databaseUrl: optional("DATABASE_URL"),
+  kimiAuthUrl: optional("KIMI_AUTH_URL"),
+  kimiOpenUrl: optional("KIMI_OPEN_URL"),
+  ownerUnionId: optional("OWNER_UNION_ID"),
 
   // ── Firebase (Firestore + Auth) ──────────────────────────────
-  // On Cloud Functions GCLOUD_PROJECT is set automatically by the runtime.
-  firebaseProjectId: required("FIREBASE_PROJECT_ID") || process.env.GCLOUD_PROJECT || "",
-  firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? "",
-  firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY ?? "",
-  firebaseAdminUid: process.env.FIREBASE_ADMIN_UID ?? "",
+  // On Cloud Functions / Vercel, GCLOUD_PROJECT (or VERCEL env) provides
+  // the project id automatically — but we tolerate it being empty so the
+  // API function boots, even if Firestore-backed routes later error out.
+  firebaseProjectId:
+    optional("FIREBASE_PROJECT_ID") || process.env.GCLOUD_PROJECT || "",
+  firebaseClientEmail: optional("FIREBASE_CLIENT_EMAIL"),
+  firebasePrivateKey: optional("FIREBASE_PRIVATE_KEY"),
+  firebaseAdminUid: optional("FIREBASE_ADMIN_UID"),
 };
