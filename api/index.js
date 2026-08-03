@@ -1,11 +1,11 @@
 // Vercel serverless entry (plain CommonJS — no transpilation).
 //
 // The whole Hono + tRPC app is pre-bundled by `npm run build` into
-// dist/vercel-app.cjs (CommonJS, firebase-admin marked external). Requiring
-// this pre-built artifact avoids Vercel re-bundling TypeScript plus
+// api/_app.cjs (CommonJS, firebase-admin marked external). Requiring this
+// pre-built artifact avoids Vercel re-bundling TypeScript plus
 // firebase-admin — which previously produced ERR_AMBIGUOUS_MODULE_SYNTAX
 // (google-gax uses __dirname in ESM output).
-const bundle = require("../dist/vercel-app.cjs");
+const bundle = require("./_app.cjs");
 const app = bundle.default || bundle;
 
 function handler(req, res) {
@@ -44,7 +44,10 @@ function handler(req, res) {
       .catch((err) => {
         console.error("[vercel-api] handler error:", err);
         res.statusCode = 500;
-        res.end("Internal Server Error");
+        res.setHeader("content-type", "text/plain");
+        res.end(
+          `[vercel-api] handler error: ${(err && err.message) || err}\n${(err && err.stack) || ""}`,
+        );
       });
   };
 

@@ -45,3 +45,6 @@ functions/node_modules/
 functions/index.js
 functions/.env
 functions/.env.*
+
+api/_app.cjs
+
