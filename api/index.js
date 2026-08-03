@@ -1,14 +1,43 @@
-// Vercel serverless entry (plain CommonJS — no transpilation).
+// Vercel serverless entry (plain CommonJS).
 //
-// The whole Hono + tRPC app is pre-bundled by `npm run build` into
-// api/_app.cjs (CommonJS, firebase-admin marked external). Requiring this
-// pre-built artifact avoids Vercel re-bundling TypeScript plus
-// firebase-admin — which previously produced ERR_AMBIGUOUS_MODULE_SYNTAX
-// (google-gax uses __dirname in ESM output).
-const bundle = require("./_app.cjs");
-const app = bundle.default || bundle;
+// Purpose: the entire Hono + tRPC app is pre-bundled by `npm run build`
+// into `api/_app.cjs` (CommonJS, firebase-admin external). Requiring that
+// pre-built artifact avoids Vercel re-bundling TypeScript + firebase-admin
+// (google-gax uses __dirname → ERR_AMBIGUOUS_MODULE_SYNTAX in ESM output).
+//
+// The require is wrapped in try/catch so that if anything fails at module
+// load (missing bundle, dependency resolution, syntax), the error is
+// returned in the HTTP response for diagnosis instead of Vercel's generic
+// FUNCTION_INVOCATION_FAILED wrapper.
+
+let app = null;
+let loadError = null;
+
+try {
+  const bundle = require("./_app.cjs");
+  const candidate = bundle && bundle.default ? bundle.default : bundle;
+  if (candidate && typeof candidate.fetch === "function") {
+    app = candidate;
+  } else {
+    loadError = new Error(
+      "[vercel-api] _app.cjs did not export a Hono app with .fetch()",
+    );
+  }
+} catch (err) {
+  loadError = err instanceof Error ? err : new Error(String(err));
+  console.error("[vercel-api] Failed to load _app.cjs:", loadError);
+}
 
 function handler(req, res) {
+  if (loadError) {
+    res.statusCode = 500;
+    res.setHeader("content-type", "text/plain");
+    res.end(
+      `[vercel-api] module load error: ${loadError.message}\n${loadError.stack || ""}`,
+    );
+    return;
+  }
+
   // Bridge node:http request/response to a WHATWG Request for Hono.
   const url = `http://${req.headers.host || "localhost"}${req.url}`;
   const headers = new Headers();
