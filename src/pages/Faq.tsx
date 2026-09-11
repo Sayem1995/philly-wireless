@@ -25,9 +25,9 @@ export default function Faq() {
                   className="w-full flex items-center justify-between gap-4 px-7 py-5 text-left font-serif text-lg text-ink hover:text-burgundy transition-colors"
                   aria-expanded={open === i}>
                   {f.q}
-                  <Plus size={20} className={`text-burgundy shrink-0 transition-transform duration-400 ${open === i ? "rotate-45" : ""}`} />
+                  <Plus size={20} className={`text-burgundy shrink-0 transition-transform duration-300 ${open === i ? "rotate-45" : ""}`} />
                 </button>
-                <div className={`grid transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${open === i ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                <div className={`grid transition-all duration-500 ease-smooth ${open === i ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
                   <div className="overflow-hidden">
                     <p className="px-7 pb-6 text-[15px] text-ink/60 leading-relaxed">{f.a}</p>
                   </div>

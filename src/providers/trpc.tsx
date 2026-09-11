@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- `trpc` is the shared client instance imported by feature modules; keeping it beside TRPCProvider is intentional. */
 import { createTRPCReact } from "@trpc/react-query";
 import { httpBatchLink } from "@trpc/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

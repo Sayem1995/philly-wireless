@@ -20,15 +20,22 @@ function getPrivateKey(): string {
 export function getDb(): Firestore {
   if (!db) {
     if (getApps().length === 0) {
+      // NOTE: `credential` must be *omitted* rather than set to `undefined`.
+      // firebase-admin rejects `{ credential: undefined }` with
+      // INVALID_APP_OPTIONS, which would make the app unbootable instead of
+      // falling back to Application Default Credentials / the Firestore
+      // emulator (FIRESTORE_EMULATOR_HOST) for local development.
+      const hasServiceAccount = !!env.firebaseClientEmail && !!getPrivateKey();
       initializeApp({
-        credential:
-          env.firebaseClientEmail && getPrivateKey()
-            ? cert({
+        ...(hasServiceAccount
+          ? {
+              credential: cert({
                 projectId: env.firebaseProjectId,
                 clientEmail: env.firebaseClientEmail,
                 privateKey: getPrivateKey(),
-              })
-            : undefined, // falls back to GOOGLE_APPLICATION_CREDENTIALS / emulator
+              }),
+            }
+          : {}),
         projectId: env.firebaseProjectId,
       });
     }

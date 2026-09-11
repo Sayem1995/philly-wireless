@@ -21,10 +21,9 @@ const NAV = [
 function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const location = useLocation();
-  useEffect(() => setOpen(false), [location.pathname]);
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 24);
+    fn();
     window.addEventListener("scroll", fn, { passive: true });
     return () => window.removeEventListener("scroll", fn);
   }, []);
@@ -34,7 +33,7 @@ function Navbar() {
         <Link to="/" aria-label="Philly Phone Repair home"><Logo /></Link>
         <nav className="hidden lg:flex items-center gap-7" aria-label="Main navigation">
           {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to}
+            <NavLink key={n.to} to={n.to} onClick={() => setOpen(false)}
               className={({ isActive }) =>
                 `text-[13px] tracking-wide font-medium transition-colors hover:text-burgundy ${isActive ? "text-burgundy" : "text-ink/60"}`}>
               {n.label}
@@ -56,11 +55,11 @@ function Navbar() {
       {open && (
         <nav className="lg:hidden bg-ivory border-t border-blush px-6 py-4 flex flex-col gap-1 shadow-xl" aria-label="Mobile navigation">
           {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} className={({ isActive }) => `py-3 text-[15px] border-b border-blush/50 ${isActive ? "text-burgundy font-semibold" : "text-ink/70"}`}>
+            <NavLink key={n.to} to={n.to} onClick={() => setOpen(false)} className={({ isActive }) => `py-3 text-[15px] border-b border-blush/50 ${isActive ? "text-burgundy font-semibold" : "text-ink/70"}`}>
               {n.label}
             </NavLink>
           ))}
-          <Link to="/book" className="mt-3 bg-burgundy text-ivory text-center font-semibold px-6 py-3.5 rounded-full">Book a Repair</Link>
+          <Link to="/book" onClick={() => setOpen(false)} className="mt-3 bg-burgundy text-ivory text-center font-semibold px-6 py-3.5 rounded-full">Book a Repair</Link>
         </nav>
       )}
     </header>

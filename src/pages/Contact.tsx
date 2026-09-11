@@ -31,7 +31,7 @@ export default function Contact() {
             { icon: Clock, label: "Hours", value: "Mon–Fri 9AM–7PM · Sat 10AM–6PM · Sun 12PM–5PM" },
           ].map((r) => (
             <a key={r.label} href={r.href} target={r.href?.startsWith("http") ? "_blank" : undefined} rel="noreferrer"
-              className="flex items-center gap-5 bg-white border border-blush rounded-3xl p-6 hover:-translate-y-1 hover:shadow-lg hover:shadow-burgundy/10 transition-all duration-400 group">
+              className="flex items-center gap-5 bg-white border border-blush rounded-3xl p-6 hover:-translate-y-1 hover:shadow-lg hover:shadow-burgundy/10 transition-all duration-300 group">
               <span className="w-12 h-12 rounded-2xl bg-blush grid place-items-center group-hover:bg-burgundy transition-colors duration-300"><r.icon size={20} className="text-burgundy group-hover:text-ivory transition-colors" /></span>
               <span><span className="block text-[11px] tracking-[0.2em] uppercase text-ink/40">{r.label}</span><span className="block font-medium mt-0.5">{r.value}</span></span>
             </a>

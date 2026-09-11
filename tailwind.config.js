@@ -75,6 +75,11 @@ module.exports = {
       boxShadow: {
         xs: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
       },
+      transitionTimingFunction: {
+        // Named so it can be used as `ease-smooth`; an arbitrary
+        // `ease-[cubic-bezier(...)]` value is ambiguous to Tailwind's parser.
+        smooth: "cubic-bezier(0.22, 1, 0.36, 1)",
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },

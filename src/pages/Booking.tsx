@@ -259,7 +259,7 @@ export default function Booking() {
                       ))}
                     </dl>
                     <div className="px-7 pb-7 grid grid-cols-3 gap-3 text-center">
-                      {[[ShieldCheck, "Lifetime warranty"], [Zap, "Same-day service"], [Search, "Free diagnostic"]].map(([Icon, l]: any, i) => (
+                      {([[ShieldCheck, "Lifetime warranty"], [Zap, "Same-day service"], [Search, "Free diagnostic"]] as const).map(([Icon, l], i) => (
                         <div key={i} className="bg-blush-light rounded-2xl py-4 px-2">
                           <Icon size={18} className="text-burgundy mx-auto mb-1.5" />
                           <p className="text-[11.5px] font-medium text-ink/60">{l}</p>

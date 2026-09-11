@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- shadcn/ui primitives intentionally co-export their cva variants and hooks; these are consumed by other modules. */
 "use client"
 
 import * as React from "react"

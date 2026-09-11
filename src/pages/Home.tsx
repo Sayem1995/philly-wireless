@@ -66,7 +66,7 @@ export default function Home() {
             </motion.div>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1, delay: 0.5 }}
               className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-[13px] text-ink/55">
-              {[[Zap, "Same-Day Repairs"], [ShieldCheck, "Lifetime Warranty"], [Award, "Certified Technicians"]].map(([Icon, label]: any, i) => (
+              {([[Zap, "Same-Day Repairs"], [ShieldCheck, "Lifetime Warranty"], [Award, "Certified Technicians"]] as const).map(([Icon, label], i) => (
                 <span key={i} className="flex items-center gap-2"><Icon size={15} className="text-burgundy" />{label}</span>
               ))}
             </motion.div>

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- the provider and its `useAuthContext` hook deliberately share this module (see `@/hooks/useAuth`). */
 import {
   createContext,
   useCallback,
@@ -40,24 +41,20 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [booting, setBooting] = useState(true);
-  const [dbUser, setDbUser] = useState<AuthUser | null>(null);
+  // Firebase Auth always emits an initial callback, so when no auth instance
+  // exists there is nothing to wait for and we are already "booted".
+  const [booting, setBooting] = useState(!auth);
 
   const isFirebaseReady = isFirebaseConfigured();
+  const utils = trpc.useUtils();
 
   // Track Firebase auth state
   useEffect(() => {
-    if (!auth) {
-      setBooting(false);
-      return;
-    }
+    if (!auth) return;
     const unsub = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
       setBooting(false);
-      if (!user) {
-        clearStoredIdToken();
-        setDbUser(null);
-      }
+      if (!user) clearStoredIdToken();
     });
     return () => unsub();
   }, []);
@@ -69,28 +66,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: false,
   });
 
-  useEffect(() => {
-    if (firebaseUser && meQuery.data) {
-      const u = meQuery.data;
-      setDbUser({
-        id: u.id,
-        uid: u.uid,
-        name: u.name ?? firebaseUser.displayName ?? "",
-        email: u.email ?? firebaseUser.email ?? "",
-        avatar: u.avatar ?? firebaseUser.photoURL ?? "",
-        role: u.role ?? "user",
-        createdAt: u.createdAt,
-        lastSignInAt: u.lastSignInAt,
-      });
-    }
-    if (!firebaseUser) setDbUser(null);
+  // The DB row is derived from the Firebase user + the `me` query, so no
+  // state synchronisation effect is needed: signing out clears firebaseUser
+  // (and the query cache), which clears the derived user in the same render.
+  const dbUser = useMemo<AuthUser | null>(() => {
+    if (!firebaseUser) return null;
+    const u = meQuery.data;
+    if (!u) return null;
+    return {
+      id: u.id,
+      uid: u.uid,
+      name: u.name ?? firebaseUser.displayName ?? "",
+      email: u.email ?? firebaseUser.email ?? "",
+      avatar: u.avatar ?? firebaseUser.photoURL ?? "",
+      role: u.role ?? "user",
+      createdAt: u.createdAt,
+      lastSignInAt: u.lastSignInAt,
+    };
   }, [firebaseUser, meQuery.data]);
 
   const logout = useCallback(async () => {
     if (auth) await signOut(auth);
     clearStoredIdToken();
-    setDbUser(null);
-  }, []);
+    setFirebaseUser(null);
+    await utils.auth.me.invalidate();
+  }, [utils]);
 
   const refresh = useCallback(async () => {
     await meQuery.refetch();
