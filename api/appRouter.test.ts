@@ -216,9 +216,15 @@ describe("shop.book", () => {
     expect(mockedStore.createBooking).toHaveBeenCalledWith(
       expect.objectContaining({ customerId: 7, date: "2026-02-01", timeSlot: "10:00" }),
     );
-    // customer confirmation + staff notification
+    // Customer is notified on both channels (email + SMS) and the staff get an
+    // alert, so three notification records are written.
     expect(mockedSendEmail).toHaveBeenCalledTimes(2);
-    expect(mockedStore.addNotification).toHaveBeenCalledTimes(2);
+    expect(mockedStore.addNotification).toHaveBeenCalledTimes(3);
+    const channels = mockedStore.addNotification.mock.calls.map(
+      (c) => (c[0] as { channel: string }).channel,
+    );
+    expect(channels).toContain("sms");
+    expect(channels).toContain("email");
   });
 
   it("reuses an existing customer found by phone", async () => {

@@ -1,6 +1,19 @@
 import { z } from "zod";
 import { createRouter, adminQuery } from "./middleware.js";
 import { store } from "./queries/store.js";
+import {
+  notifyCustomer,
+  type CustomerNotificationKind,
+} from "./notifications.js";
+
+/** Status changes worth telling the customer about. "pending" is the default. */
+const CUSTOMER_NOTIFIABLE_STATUSES = [
+  "accepted",
+  "in_progress",
+  "completed",
+  "rescheduled",
+  "cancelled",
+];
 
 const bookingInput = z.object({
   id: z.number(),
@@ -57,6 +70,8 @@ export const adminRouter = createRouter({
 
   updateBooking: adminQuery.input(bookingInput).mutation(async ({ input }) => {
     const { id, ...data } = input;
+    const existing = await store.getBooking(id);
+
     const set: Record<string, unknown> = {};
     if (data.status) set.status = data.status;
     if (data.date) set.date = data.date;
@@ -67,12 +82,36 @@ export const adminRouter = createRouter({
 
     // auto warranty: 1 year from completion for screen repairs, 90 days otherwise
     if (data.status === "completed" && !data.warrantyUntil) {
-      const b = await store.getBooking(id);
-      const days = b?.repairType.toLowerCase().includes("screen") ? 365 : 90;
+      const days = existing?.repairType.toLowerCase().includes("screen") ? 365 : 90;
       set.warrantyUntil = new Date(Date.now() + days * 864e5).toISOString().slice(0, 10);
     }
+
     await store.updateBooking(id, set as never);
-    return { ok: true };
+
+    // Tell the customer — but only when the status genuinely changed, so
+    // re-saving an edit (notes, price) doesn't spam them.
+    const statusChanged =
+      Boolean(data.status) && Boolean(existing) && existing!.status !== data.status;
+
+    if (statusChanged && existing && CUSTOMER_NOTIFIABLE_STATUSES.includes(data.status as string)) {
+      await notifyCustomer(
+        {
+          id: existing.id,
+          customerId: existing.customerId,
+          customerName: existing.customerName,
+          phone: existing.phone,
+          email: existing.email,
+          device: existing.device,
+          repairType: existing.repairType,
+          date: (data.date as string) ?? existing.date,
+          timeSlot: (data.timeSlot as string) ?? existing.timeSlot,
+          warrantyUntil: (set.warrantyUntil as string) ?? existing.warrantyUntil,
+        },
+        data.status as CustomerNotificationKind,
+      );
+    }
+
+    return { ok: true, notifiedCustomer: statusChanged };
   }),
 
   deleteBooking: adminQuery

@@ -52,6 +52,36 @@ When no email provider is configured, `sendEmail()` returns
 `{ delivered: false }` and the message is recorded in the CRM communication
 history instead — bookings still succeed.
 
+### Customer notifications (email + SMS)
+
+Customers are told about their repair on **every channel you hold for them** —
+email if they gave one, SMS if they gave a phone number:
+
+| Event | Message |
+| --- | --- |
+| Booking created | "We've got your booking" + reference, device, date and time |
+| Status → `accepted` | "Your repair has been accepted" |
+| Status → `in_progress` | "Your repair is underway" |
+| Status → `completed` | "Your device is ready to collect" + warranty date and opening hours |
+| Status → `rescheduled` | "Your appointment has moved" + the new slot |
+| Status → `cancelled` | "Your appointment was cancelled" |
+
+Status messages fire **only when the status actually changes**, so re-saving a
+note or a price estimate never spams the customer. Every attempt — and whether it
+was genuinely delivered — is recorded in the `notifications` collection, so the
+shop can see exactly what the customer was told.
+
+Delivery is best-effort and per-channel: a failed email still lets the SMS
+through, and a missing provider is logged as `(queued — … not configured)`
+rather than failing the booking or the status change.
+
+- **Email** — `SENDGRID_API_KEY` + `SENDGRID_FROM` (preferred, HTTPS), or
+  `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM`.
+- **SMS** — `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`
+  (E.164, e.g. `+12155550123`). Sent through the Twilio REST API over `fetch`,
+  so no extra dependency is bundled into the serverless function.
+- **`STAFF_EMAIL`** — where new-booking alerts are sent.
+
 `FIREBASE_PRIVATE_KEY` may contain literal `\n` escapes; they are converted to
 real newlines at load time, and wrapping quotes are stripped.
 

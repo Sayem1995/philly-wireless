@@ -2,11 +2,8 @@ import { z } from "zod";
 import { createRouter, publicQuery } from "./middleware.js";
 import { store } from "./queries/store.js";
 import { TIME_SLOTS, STORE } from "../contracts/constants.js";
-import {
-  sendEmail,
-  bookingConfirmationHtml,
-  staffNotificationHtml,
-} from "./email.js";
+import { sendEmail, staffNotificationHtml } from "./email.js";
+import { notifyCustomer } from "./notifications.js";
 
 export const shopRouter = createRouter({
   /* ---------- repair pricing ---------- */
@@ -139,20 +136,25 @@ export const shopRouter = createRouter({
         timeSlot: input.timeSlot,
         notes: input.notes || null,
       };
+      // Customer gets this on every channel we hold for them (email and/or SMS);
+      // the exact delivery outcome is recorded in the CRM notification history.
+      await notifyCustomer(
+        {
+          id: booking.id,
+          customerId: customer.id,
+          customerName: input.customerName,
+          phone: input.phone,
+          email: input.email || null,
+          device: input.device,
+          repairType: input.repairType,
+          date: input.date,
+          timeSlot: input.timeSlot,
+        },
+        "received",
+      );
+
+      // Staff alert (email only).
       try {
-        if (input.email) {
-          const r = await sendEmail({
-            to: input.email,
-            subject: `Booking confirmed #PPR-${booking.id} — ${STORE.name}`,
-            html: bookingConfirmationHtml(details),
-          });
-          await store.addNotification({
-            bookingId: booking.id,
-            customerId: customer.id,
-            channel: "email",
-            message: `Booking confirmation #PPR-${booking.id}${r.delivered ? " (sent)" : " (queued — SMTP not configured)"}`,
-          });
-        }
         const staff = await sendEmail({
           to: process.env.STAFF_EMAIL ?? STORE.email,
           subject: `New booking #PPR-${booking.id}: ${input.device} — ${input.repairType}`,
@@ -162,10 +164,10 @@ export const shopRouter = createRouter({
           bookingId: booking.id,
           customerId: customer.id,
           channel: "email",
-          message: `Staff notification for #PPR-${booking.id}${staff.delivered ? " (sent)" : " (queued — SMTP not configured)"}`,
+          message: `Staff notification for #PPR-${booking.id}${staff.delivered ? " (sent)" : " (queued — email not configured)"}`,
         });
       } catch (err) {
-        console.error("[email] booking notification failed:", err);
+        console.error("[email] staff notification failed:", err);
       }
 
       return { ok: true, bookingId: booking.id };
