@@ -2,6 +2,7 @@ import { NavLink, Outlet, Link } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import Seo from "@/components/Seo";
 import Logo from "@/components/Logo";
+import { LOGIN_PATH } from "@/const";
 import {
   LayoutDashboard, CalendarCheck, Users, Package, Wrench,
   Tag, BarChart3, LogOut, Store,
@@ -20,7 +21,24 @@ const NAV = [
 export default function AdminLayout() {
   const { user, isAuthenticated, isLoading, logout } = useAuth({ redirectOnUnauthenticated: true });
   if (isLoading) return <div className="min-h-screen grid place-items-center bg-ivory text-ink/40">Loading…</div>;
-  if (!isAuthenticated) return null;
+  // Never render nothing: a blank screen looks like the app is broken and gives
+  // the user no way forward. Show where they are and how to get in.
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-ivory px-5 text-center">
+        <div>
+          <h1 className="font-serif text-2xl text-ink mb-3">Please sign in</h1>
+          <p className="text-ink/55 text-sm mb-6 max-w-sm">
+            The admin area needs a staff account. If you were signed in, your session may have
+            expired.
+          </p>
+          <Link to={LOGIN_PATH} className="bg-burgundy text-ivory text-sm font-semibold px-6 py-3 rounded-full hover:bg-burgundy-dark transition-colors">
+            Go to sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
   if (user?.role !== "admin") {
     return (
       <div className="min-h-screen grid place-items-center bg-ivory px-5 text-center">
