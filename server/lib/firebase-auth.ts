@@ -1,7 +1,8 @@
+import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getDb } from "../queries/firestore.js";
 import type { FirestoreUser } from "../queries/users.js";
 import { findUserByUid, upsertUser } from "../queries/users.js";
+import { env } from "./env.js";
 
 /**
  * Firebase Auth identity helpers.
@@ -15,8 +16,13 @@ import { findUserByUid, upsertUser } from "../queries/users.js";
 let initialized = false;
 function ensureAuth() {
   if (initialized) return;
-  // Trigger admin init (credentials come from env / application default)
-  getDb();
+  // Verifying an ID token only needs the project id — it validates against
+  // Google's public signing keys. We deliberately do NOT call getDb() here:
+  // that would force a data-plane credential (service account or WIF) just to
+  // verify a login token, and would fail closed for unauthenticated routes.
+  if (getApps().length === 0) {
+    initializeApp({ projectId: env.firebaseProjectId });
+  }
   getAuth();
   initialized = true;
 }

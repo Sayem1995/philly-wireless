@@ -26,4 +26,13 @@ export const env = {
   firebaseClientEmail: optional("FIREBASE_CLIENT_EMAIL"),
   firebasePrivateKey: optional("FIREBASE_PRIVATE_KEY"),
   firebaseAdminUid: optional("FIREBASE_ADMIN_UID"),
+
+  // ── Keyless Google Cloud auth (Vercel OIDC → Workload Identity) ──
+  // Preferred over a service-account key: the Vercel OIDC token is exchanged
+  // for a short-lived access token via Workload Identity Federation. These
+  // values are identifiers, not secrets.
+  gcpWorkloadIdentityProjectNumber: optional("GCP_WORKLOAD_IDENTITY_PROJECT_NUMBER"),
+  gcpWorkloadIdentityPoolId: optional("GCP_WORKLOAD_IDENTITY_POOL_ID"),
+  gcpWorkloadIdentityProviderId: optional("GCP_WORKLOAD_IDENTITY_PROVIDER_ID"),
+  gcpServiceAccountEmail: optional("GCP_SERVICE_ACCOUNT_EMAIL"),
 };

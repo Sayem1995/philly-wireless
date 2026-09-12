@@ -5,10 +5,21 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router.js";
 import { createContext } from "./context.js";
 import { env } from "./lib/env.js";
+import { runWithVercelOidcToken, VERCEL_OIDC_HEADER } from "./lib/gcp-oidc.js";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
+
+/**
+ * Make the current request's Vercel OIDC token available to the keyless Google
+ * credential. In Vercel Functions the token only exists on the request, but the
+ * Firestore client is created once and refreshes lazily — AsyncLocalStorage
+ * bridges the two. A no-op outside Vercel or when OIDC federation is disabled.
+ */
+app.use("*", (c, next) =>
+  runWithVercelOidcToken(c.req.header(VERCEL_OIDC_HEADER), next),
+);
 
 // Handle tRPC + any other /api routes
 app.use("/api/trpc/*", async (c) => {

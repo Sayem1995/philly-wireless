@@ -40,8 +40,10 @@ Server values must never use that prefix.
 | Variable                                                       | Purpose                                       |
 | -------------------------------------------------------------- | --------------------------------------------- |
 | `VITE_FIREBASE_API_KEY` … `VITE_FIREBASE_APP_ID`                | Firebase **web** config (client auth)         |
-| `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Firebase **admin** service account (server) |
+| `FIREBASE_PROJECT_ID`                                           | Firebase project id (used by Admin SDK)       |
+| `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`                 | **Legacy** service-account credentials (see below) |
 | `FIREBASE_ADMIN_UID`                                            | Marks this Firebase UID as `admin` on sign-in |
+| `GCP_WORKLOAD_IDENTITY_*`, `GCP_SERVICE_ACCOUNT_EMAIL`          | **Preferred** keyless auth (see below)        |
 | `SENDGRID_API_KEY` / `SENDGRID_FROM`                            | Email via SendGrid Web API (preferred)        |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Email via SMTP fallback                       |
 | `STAFF_EMAIL`                                                   | Recipient for new-booking notifications       |
@@ -52,6 +54,65 @@ history instead — bookings still succeed.
 
 `FIREBASE_PRIVATE_KEY` may contain literal `\n` escapes; they are converted to
 real newlines at load time, and wrapping quotes are stripped.
+
+### Keyless Google Cloud authentication (recommended)
+
+Storing a service-account private key is a long-lived secret. Many Google Cloud
+organizations forbid key creation outright (`Key creation is not allowed on this
+service account`). The supported alternative — and Google's documented
+preference for external workloads — is **Workload Identity Federation**.
+
+Vercel issues a short-lived OIDC token (RS256, ~2h) for every request. The server
+exchanges it at Google's Security Token Service and impersonates the Firebase
+Admin service account, yielding a short-lived access token. **No private key
+exists anywhere.**
+
+```
+Vercel request ──x-vercel-oidc-token──► AsyncLocalStorage
+                                             │ (subject_token_supplier)
+                                             ▼
+                                    IdentityPoolClient
+                                             │
+                       ┌─────────────────────┴─────────────────────┐
+                       ▼                                           ▼
+             sts.googleapis.com/v1/token            iamcredentials:generateAccessToken
+                       └─────────────────────┬─────────────────────┘
+                                             ▼
+                              short-lived token → @google-cloud/firestore
+```
+
+Set these **non-secret** variables (Production, plus Preview if you want
+preview deploys to work):
+
+```
+GCP_WORKLOAD_IDENTITY_PROJECT_NUMBER   # GCP project number
+GCP_WORKLOAD_IDENTITY_POOL_ID          # e.g. vercel-pool
+GCP_WORKLOAD_IDENTITY_PROVIDER_ID      # e.g. vercel
+GCP_SERVICE_ACCOUNT_EMAIL              # the Firebase Admin service account
+```
+
+**Also required (dashboard toggle):** Vercel → Project → Settings → General →
+**"Enable access to System Environment Variables"** (OIDC federation). Without
+it, no `x-vercel-oidc-token` header is sent and requests fail with a clear
+"no Vercel OIDC token" error.
+
+The Google Cloud side (Workload Identity Pool, OIDC provider, and the
+`roles/iam.workloadIdentityUser` binding scoped to this project's production
+deployments) is a one-time setup done by a project owner.
+
+Credential resolution order in `server/queries/firestore.ts`:
+
+1. **Emulator** — `FIRESTORE_EMULATOR_HOST` (local dev, no credentials)
+2. **Workload Identity Federation** — when the `GCP_WORKLOAD_IDENTITY_*` vars are set
+3. **Service-account cert** — legacy `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY`
+4. **Application Default Credentials** — Google-hosted runtimes
+
+> Note: `firebase-admin`'s own `getFirestore()` accepts only a service-account
+> cert or its internal ADC marker, and throws `invalid-credential` for anything
+> else. The WIF path therefore constructs `@google-cloud/firestore` directly and
+> injects the auth client. `firebase-admin/auth` is unaffected — verifying an ID
+> token needs only the project id.
+
 
 ### Local development against the Firestore emulator
 
