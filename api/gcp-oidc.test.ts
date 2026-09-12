@@ -51,6 +51,16 @@ function internals(client: unknown) {
   };
 }
 
+/**
+ * `createWifAuthClient` returns a GoogleAuth wrapping the external-account
+ * client (google-gax requires a GoogleAuth, not a bare credential), so unwrap
+ * it to assert the underlying configuration. GoogleAuth stores an injected
+ * client as `cachedCredential`.
+ */
+function underlying(auth: unknown) {
+  return internals((auth as { cachedCredential: unknown }).cachedCredential);
+}
+
 describe("getWifConfig", () => {
   it("builds the STS audience from the provider resource name", () => {
     expect(getWifConfig()!.audience).toBe(EXPECTED_AUDIENCE);
@@ -113,9 +123,17 @@ describe("request-scoped OIDC token", () => {
 });
 
 describe("createWifAuthClient", () => {
+  it("returns a GoogleAuth, which google-gax requires", () => {
+    const auth = createWifAuthClient(getWifConfig()!);
+    // google-gax calls `this.auth.getUniverseDomain()`; only GoogleAuth has it.
+    expect(typeof (auth as unknown as { getUniverseDomain?: unknown }).getUniverseDomain).toBe(
+      "function",
+    );
+  });
+
   it("configures the credential as Google expects", () => {
     const config = getWifConfig()!;
-    const client = internals(createWifAuthClient(config));
+    const client = underlying(createWifAuthClient(config));
 
     expect(client.audience).toBe(EXPECTED_AUDIENCE);
     expect(client.serviceAccountImpersonationUrl).toBe(config.impersonationUrl);
@@ -123,26 +141,26 @@ describe("createWifAuthClient", () => {
   });
 
   it("uses the request-scoped token as the STS subject token", async () => {
-    const client = createWifAuthClient(getWifConfig()!);
+    const client = underlying(createWifAuthClient(getWifConfig()!));
     const token = await runWithVercelOidcToken("vercel-oidc-jwt", () =>
-      internals(client).retrieveSubjectToken(),
+      client.retrieveSubjectToken(),
     );
     expect(token).toBe("vercel-oidc-jwt");
   });
 
   it("falls back to VERCEL_OIDC_TOKEN when there is no request scope", async () => {
-    const client = createWifAuthClient(getWifConfig()!);
+    const client = underlying(createWifAuthClient(getWifConfig()!));
     process.env.VERCEL_OIDC_TOKEN = "build-time-token";
     try {
-      expect(await internals(client).retrieveSubjectToken()).toBe("build-time-token");
+      expect(await client.retrieveSubjectToken()).toBe("build-time-token");
     } finally {
       delete process.env.VERCEL_OIDC_TOKEN;
     }
   });
 
   it("fails with an actionable message when no token is present", async () => {
-    const client = createWifAuthClient(getWifConfig()!);
-    await expect(internals(client).retrieveSubjectToken()).rejects.toThrow(
+    const client = underlying(createWifAuthClient(getWifConfig()!));
+    await expect(client.retrieveSubjectToken()).rejects.toThrow(
       /No Vercel OIDC token available/i,
     );
   });
@@ -192,14 +210,15 @@ describe("token exchange against a stub STS", () => {
       impersonationUrl: `${baseUrl}/impersonate`,
     };
     // Point the STS exchange at the local stub (production uses Google's URL).
-    const client = createWifAuthClient(config, { tokenUrl: `${baseUrl}/token` });
+    const auth = createWifAuthClient(config, { tokenUrl: `${baseUrl}/token` });
 
-    const creds = (await runWithVercelOidcToken("vercel-oidc-jwt", () =>
-      client.getAccessToken(),
-    )) as { token?: string | null } | null;
+    // GoogleAuth.getAccessToken() returns the token string itself.
+    const token = await runWithVercelOidcToken("vercel-oidc-jwt", () =>
+      auth.getAccessToken(),
+    );
 
-    // The client surfaces the impersonated token.
-    expect(creds?.token).toBe("exchanged-access-token");
+    // The auth surfaces the impersonated token.
+    expect(token).toBe("exchanged-access-token");
 
     // Step 1 was a well-formed RFC 8693 token exchange with the Vercel JWT.
     expect(received).not.toBeNull();

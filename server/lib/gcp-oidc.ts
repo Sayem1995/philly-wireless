@@ -1,5 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { IdentityPoolClient, type SubjectTokenSupplier } from "google-auth-library";
+import {
+  GoogleAuth,
+  IdentityPoolClient,
+  type SubjectTokenSupplier,
+} from "google-auth-library";
 import { env } from "./env.js";
 
 /**
@@ -138,10 +142,17 @@ class RequestScopedSubjectTokenSupplier implements SubjectTokenSupplier {
 }
 
 /**
- * Build a credential that exchanges the current request's Vercel OIDC token for
- * a short-lived Google access token, impersonating the Firebase Admin service
- * account. Construction performs no network I/O — the exchange happens lazily
- * on the first token fetch, which is also when the request-scoped token exists.
+ * Build the auth object for `@google-cloud/firestore`.
+ *
+ * Returns a `GoogleAuth` wrapping the external-account client, NOT the bare
+ * client. `@google-cloud/firestore` forwards `settings.auth` into
+ * `google-gax`'s `GrpcClient`, which does `options.auth || new GoogleAuth(...)`
+ * and later calls `this.auth.getUniverseDomain()`. That method exists only on
+ * `GoogleAuth`, so injecting a bare credential fails at request time with
+ * "this.auth.getUniverseDomain is not a function".
+ *
+ * Construction performs no network I/O — the STS exchange happens lazily on the
+ * first token fetch, which is also when the request-scoped token exists.
  *
  * `overrides` exists so tests can redirect the STS endpoint to a local stub;
  * production callers never pass it.
@@ -149,8 +160,8 @@ class RequestScopedSubjectTokenSupplier implements SubjectTokenSupplier {
 export function createWifAuthClient(
   config: WifConfig,
   overrides: { tokenUrl?: string } = {},
-): IdentityPoolClient {
-  return new IdentityPoolClient({
+): GoogleAuth {
+  const externalAccountClient = new IdentityPoolClient({
     type: "external_account",
     audience: config.audience,
     subject_token_type: SUBJECT_TOKEN_TYPE_JWT,
@@ -159,4 +170,6 @@ export function createWifAuthClient(
     scopes: [CLOUD_PLATFORM_SCOPE],
     subject_token_supplier: new RequestScopedSubjectTokenSupplier(),
   });
+
+  return new GoogleAuth({ authClient: externalAccountClient });
 }
