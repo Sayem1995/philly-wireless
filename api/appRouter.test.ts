@@ -25,6 +25,10 @@ vi.mock("../server/queries/store.js", () => ({
     createCustomer: vi.fn(),
     createBooking: vi.fn(),
     addNotification: vi.fn(),
+    // pricing management
+    updatePrice: vi.fn(),
+    createPrice: vi.fn(),
+    deletePrice: vi.fn(),
     // admin surface
     bookings: vi.fn(),
     customers: vi.fn(),
@@ -279,6 +283,69 @@ describe("authorization", () => {
       uid: "admin-uid",
       role: "admin",
     });
+  });
+});
+
+describe("admin price management", () => {
+  it("creates a new price row, normalising category and trimming input", async () => {
+    mockedStore.createPrice.mockResolvedValue({
+      id: 1105,
+      category: "smartphone",
+      brand: "Nothing Phone",
+      service: "Screen Replacement",
+      priceLabel: "From $119",
+      sortOrder: 52,
+    });
+
+    const res = await caller(adminUser).admin.createPrice({
+      category: "Smartphone",
+      brand: "  Nothing Phone  ",
+      service: " Screen Replacement ",
+      priceLabel: " From $119 ",
+    });
+
+    expect(res).toEqual({ ok: true, id: 1105 });
+    expect(mockedStore.createPrice).toHaveBeenCalledWith({
+      category: "smartphone",
+      brand: "Nothing Phone",
+      service: "Screen Replacement",
+      priceLabel: "From $119",
+    });
+  });
+
+  it("rejects an empty field", async () => {
+    await expect(
+      caller(adminUser).admin.createPrice({
+        category: "smartphone",
+        brand: "",
+        service: "Screen Replacement",
+        priceLabel: "From $10",
+      }),
+    ).rejects.toThrow();
+    expect(mockedStore.createPrice).not.toHaveBeenCalled();
+  });
+
+  it("blocks non-admins from creating prices", async () => {
+    await expect(
+      caller(regularUser).admin.createPrice({
+        category: "smartphone",
+        brand: "X",
+        service: "Y",
+        priceLabel: "From $1",
+      }),
+    ).rejects.toThrow(/permissions/i);
+    expect(mockedStore.createPrice).not.toHaveBeenCalled();
+  });
+
+  it("deletes a price row", async () => {
+    mockedStore.deletePrice.mockResolvedValue(undefined);
+    await expect(caller(adminUser).admin.deletePrice({ id: 42 })).resolves.toEqual({ ok: true });
+    expect(mockedStore.deletePrice).toHaveBeenCalledWith(42);
+  });
+
+  it("blocks non-admins from deleting prices", async () => {
+    await expect(caller(regularUser).admin.deletePrice({ id: 42 })).rejects.toThrow(/permissions/i);
+    expect(mockedStore.deletePrice).not.toHaveBeenCalled();
   });
 });
 

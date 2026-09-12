@@ -306,6 +306,24 @@ export const store = {
   async updatePrice(id: number, priceLabel: string): Promise<void> {
     await updateRow(COLLECTIONS.repairPrices, id, { priceLabel });
   },
+  async createPrice(data: {
+    category: string;
+    brand: string;
+    service: string;
+    priceLabel: string;
+  }): Promise<RepairPriceRow> {
+    // `prices()` orders by `sortOrder`, and Firestore omits documents that have
+    // no value for an orderBy field — so every row MUST carry one, or it would be
+    // written successfully yet never appear on the site.
+    const existing = await listRows(COLLECTIONS.repairPrices, "sortOrder", "asc");
+    const nextSortOrder =
+      existing.reduce((max, r) => Math.max(max, Number(r.sortOrder ?? 0)), 0) + 1;
+    const row = await createRow(COLLECTIONS.repairPrices, { ...data, sortOrder: nextSortOrder });
+    return mapRepairPrice(row);
+  },
+  async deletePrice(id: number): Promise<void> {
+    await deleteRow(COLLECTIONS.repairPrices, id);
+  },
 
   // Products
   async products(kind?: string): Promise<ProductRow[]> {

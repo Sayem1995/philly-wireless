@@ -260,6 +260,33 @@ export const adminRouter = createRouter({
       return { ok: true };
     }),
 
+  /** Add a new model / repair to the public price list. */
+  createPrice: adminQuery
+    .input(
+      z.object({
+        category: z.string().min(1).max(40),
+        brand: z.string().min(1).max(80),
+        service: z.string().min(1).max(80),
+        priceLabel: z.string().min(1).max(80),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const row = await store.createPrice({
+        category: input.category.trim().toLowerCase(),
+        brand: input.brand.trim(),
+        service: input.service.trim(),
+        priceLabel: input.priceLabel.trim(),
+      });
+      return { ok: true, id: row.id };
+    }),
+
+  deletePrice: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await store.deletePrice(input.id);
+      return { ok: true };
+    }),
+
   /* ---------- messages ---------- */
   messages: adminQuery.query(async () => {
     return store.messages();
