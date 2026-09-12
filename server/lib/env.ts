@@ -18,11 +18,16 @@ export const env = {
   ownerUnionId: optional("OWNER_UNION_ID"),
 
   // ── Firebase (Firestore + Auth) ──────────────────────────────
-  // On Cloud Functions / Vercel, GCLOUD_PROJECT (or VERCEL env) provides
-  // the project id automatically — but we tolerate it being empty so the
-  // API function boots, even if Firestore-backed routes later error out.
+  // The project id is the same value the browser uses, so accept the Vite
+  // (client) spelling as a fallback. They are easy to confuse — VITE_FIREBASE_*
+  // configures the BROWSER SDK only and cannot stand in for the server-side
+  // credentials, but the project id itself is genuinely the same string.
+  // GCLOUD_PROJECT is set automatically on Google-hosted runtimes.
   firebaseProjectId:
-    optional("FIREBASE_PROJECT_ID") || process.env.GCLOUD_PROJECT || "",
+    optional("FIREBASE_PROJECT_ID") ||
+    optional("VITE_FIREBASE_PROJECT_ID") ||
+    process.env.GCLOUD_PROJECT ||
+    "",
   firebaseClientEmail: optional("FIREBASE_CLIENT_EMAIL"),
   firebasePrivateKey: optional("FIREBASE_PRIVATE_KEY"),
   firebaseAdminUid: optional("FIREBASE_ADMIN_UID"),
