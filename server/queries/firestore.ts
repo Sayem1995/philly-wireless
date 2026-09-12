@@ -1,10 +1,26 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp, type Firestore } from "firebase-admin/firestore";
-import { Firestore as CloudFirestore } from "@google-cloud/firestore";
 import { env } from "../lib/env.js";
 import { createWifAuthClient, getWifConfig } from "../lib/gcp-oidc.js";
 
 let db: Firestore | undefined;
+
+/**
+ * Load `@google-cloud/firestore` at runtime rather than bundling it.
+ *
+ * It depends on `google-gax`, which is CommonJS and reads `__dirname` at module
+ * scope. Bundling that into the ESM server output (`dist/boot.js`) throws
+ * "ReferenceError: __dirname is not defined in ES module scope" on boot, so the
+ * package is marked `--external` in the build and imported lazily here. The
+ * dynamic import also keeps it off the startup path, matching firebase-admin's
+ * own lazy require of the same package.
+ */
+let cloudFirestoreCtor: Promise<typeof import("@google-cloud/firestore").Firestore> | undefined;
+
+function loadCloudFirestore(): Promise<typeof import("@google-cloud/firestore").Firestore> {
+  cloudFirestoreCtor ??= import("@google-cloud/firestore").then((m) => m.Firestore);
+  return cloudFirestoreCtor;
+}
 
 function getPrivateKey(): string {
   if (env.firebasePrivateKey) {
@@ -35,11 +51,13 @@ export function isEmulator(): boolean {
  * and hand it the WIF auth client — Firestore spreads unknown settings into the
  * GAPIC client options, which adopt `opts.auth`.
  */
-function createWifFirestore(): Firestore {
+async function createWifFirestore(): Promise<Firestore> {
   const config = getWifConfig();
   if (!config) {
     throw new Error("[firestore] createWifFirestore() called without WIF configuration.");
   }
+
+  const CloudFirestore = await loadCloudFirestore();
 
   // `@google-cloud/firestore` spreads unrecognised settings into the GAPIC
   // client options, and the GAPIC client adopts `opts.auth` as its auth client.
@@ -50,7 +68,7 @@ function createWifFirestore(): Firestore {
   } as ConstructorParameters<typeof CloudFirestore>[0]) as unknown as Firestore;
 }
 
-export function getDb(): Firestore {
+export async function getDb(): Promise<Firestore> {
   if (!db) {
     // 1. Emulator (local development) — no credentials involved at all.
     //    Keep this branch first so the emulator always wins locally.
@@ -65,7 +83,7 @@ export function getDb(): Firestore {
     const wif = getWifConfig();
     if (wif) {
       initializeFirebaseApp({});
-      db = createWifFirestore();
+      db = await createWifFirestore();
       return db;
     }
 
@@ -89,6 +107,25 @@ export function getDb(): Firestore {
     db = getFirestore();
   }
   return db;
+}
+
+/**
+ * Which credential path `getDb()` will take. Non-secret; surfaced by
+ * `/api/health` so a misconfigured deployment is diagnosable at a glance.
+ */
+export type CredentialSource =
+  | "emulator"
+  | "workload_identity_federation"
+  | "service_account"
+  | "application_default"
+  | "none";
+
+export function credentialSource(): CredentialSource {
+  if (isEmulator()) return "emulator";
+  if (getWifConfig()) return "workload_identity_federation";
+  if (env.firebaseClientEmail && getPrivateKey()) return "service_account";
+  if (env.firebaseProjectId) return "application_default";
+  return "none";
 }
 
 /**

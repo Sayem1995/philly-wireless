@@ -6,6 +6,7 @@ import { appRouter } from "./router.js";
 import { createContext } from "./context.js";
 import { env } from "./lib/env.js";
 import { runWithVercelOidcToken, VERCEL_OIDC_HEADER } from "./lib/gcp-oidc.js";
+import { credentialSource, getDb } from "./queries/firestore.js";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -20,6 +21,33 @@ app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 app.use("*", (c, next) =>
   runWithVercelOidcToken(c.req.header(VERCEL_OIDC_HEADER), next),
 );
+
+/**
+ * Health check. Forces the Firestore client to be created so a bad or missing
+ * credential surfaces here as a clear error rather than on a user-facing page.
+ * Reports only non-secret identifiers.
+ */
+app.get("/api/health", async (c) => {
+  const source = credentialSource();
+  const projectId = env.firebaseProjectId || null;
+  try {
+    const db = await getDb();
+    // Cheap round-trip that requires a real credential (not just client construction).
+    await db.collection("repairPrices").limit(1).get();
+    return c.json({ ok: true, projectId, credentialSource: source, firestore: "reachable" });
+  } catch (err) {
+    return c.json(
+      {
+        ok: false,
+        projectId,
+        credentialSource: source,
+        firestore: "unreachable",
+        error: err instanceof Error ? err.message : String(err),
+      },
+      503,
+    );
+  }
+});
 
 // Handle tRPC + any other /api routes
 app.use("/api/trpc/*", async (c) => {

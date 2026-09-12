@@ -6,12 +6,17 @@ import { nextId } from "../server/queries/ids.js";
  * Seeds Firestore with the initial catalog for Philly Phone Repair.
  * Run with: npm run db:seed
  *
- * Requires FIRESTORE_EMULATOR_HOST (local) or production FIREBASE_* credentials.
+ * Requires FIRESTORE_EMULATOR_HOST (local) or real credentials for the target
+ * project (Vercel OIDC / Workload Identity Federation, or ADC locally).
+ *
+ * ⚠️ NOT IDEMPOTENT. It always allocates fresh ids via `nextId`, so running it
+ * twice APPENDS a second copy of every price/product/part/post instead of
+ * updating in place. Confirm the target project before running.
  */
 const CALL = "Call us for pricing";
 
 async function seed() {
-  const db = getDb();
+  const db = await getDb();
 
   /* ---------- Repair prices ---------- */
   const prices: Array<{ category: string; brand: string; service: string; priceLabel: string; sortOrder: number }> = [];

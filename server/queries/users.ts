@@ -27,7 +27,7 @@ function mapUser(data: Record<string, unknown>): FirestoreUser {
 }
 
 export async function findUserByUnionId(uid: string): Promise<FirestoreUser | undefined> {
-  const db = getDb();
+  const db = await getDb();
   const snap = await db.collection("users").where("uid", "==", uid).limit(1).get();
   if (snap.empty) return undefined;
   return mapUser(snap.docs[0].data() as Record<string, unknown>);
@@ -44,7 +44,7 @@ export async function upsertUser(data: {
   avatar?: string | null;
   role?: "user" | "admin";
 }) {
-  const db = getDb();
+  const db = await getDb();
   const existing = await findUserByUnionId(data.uid);
 
   if (existing) {
@@ -73,7 +73,10 @@ export async function upsertUser(data: {
   });
 }
 
-async function nextIdFor(db: ReturnType<typeof getDb>, collection: string): Promise<number> {
+async function nextIdFor(
+  db: Awaited<ReturnType<typeof getDb>>,
+  collection: string,
+): Promise<number> {
   const counterRef = db.collection("__counters").doc(collection);
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(counterRef);

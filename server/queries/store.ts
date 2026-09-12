@@ -25,7 +25,7 @@ type Row = Record<string, unknown>;
 /* ---------- raw helpers ---------- */
 
 async function listRows(col: string, field?: string, order: "asc" | "desc" = "asc"): Promise<Row[]> {
-  const db = getDb();
+  const db = await getDb();
   let q: Query = db.collection(col);
   if (field) q = q.orderBy(field, order);
   const snap = await q.get();
@@ -33,18 +33,18 @@ async function listRows(col: string, field?: string, order: "asc" | "desc" = "as
 }
 
 async function queryWhere(col: string, field: string, value: unknown): Promise<Row[]> {
-  const snap = await getDb().collection(col).where(field, "==", value).get();
+  const snap = await (await getDb()).collection(col).where(field, "==", value).get();
   return snap.docs.map((d) => ({ id: Number(d.id), ...d.data() }) as Row);
 }
 
 async function getRow(col: string, id: number): Promise<Row | undefined> {
-  const snap = await getDb().collection(col).doc(String(id)).get();
+  const snap = await (await getDb()).collection(col).doc(String(id)).get();
   if (!snap.exists) return undefined;
   return { id, ...snap.data() } as Row;
 }
 
 async function createRow(col: string, data: Row): Promise<Row> {
-  const db = getDb();
+  const db = await getDb();
   const id = await nextId(db, col);
   const row: Row = {
     id,
@@ -57,14 +57,14 @@ async function createRow(col: string, data: Row): Promise<Row> {
 }
 
 async function updateRow(col: string, id: number, data: Row): Promise<void> {
-  await getDb()
+  await (await getDb())
     .collection(col)
     .doc(String(id))
     .update({ ...data, updatedAt: new Date() });
 }
 
 async function deleteRow(col: string, id: number): Promise<void> {
-  await getDb().collection(col).doc(String(id)).delete();
+  await (await getDb()).collection(col).doc(String(id)).delete();
 }
 
 /* ---------- typed rows ---------- */
