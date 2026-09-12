@@ -57,10 +57,15 @@ const STEPS = ["Device", "Brand", "Model", "Problem", "Schedule", "Details", "Re
 function nextDays(n: number) {
   const out: { iso: string; day: string; num: string; month: string }[] = [];
   const d = new Date();
+  // Normalise to local noon so DST shifts can't roll the date over.
+  d.setHours(12, 0, 0, 0);
   while (out.length < n) {
     d.setDate(d.getDate() + 1);
     out.push({
-      iso: d.toISOString().slice(0, 10),
+      // Build the ISO date from LOCAL parts. `toISOString()` would convert to
+      // UTC, so for users behind UTC the booked date could differ from the
+      // date shown on the button (e.g. label "13" but booked 2026-09-14).
+      iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
       day: d.toLocaleDateString("en-US", { weekday: "short" }),
       num: String(d.getDate()),
       month: d.toLocaleDateString("en-US", { month: "short" }),
