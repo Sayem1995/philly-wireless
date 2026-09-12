@@ -23,9 +23,9 @@ app.use("*", (c, next) =>
 );
 
 /**
- * Health check. Forces the Firestore client to be created so a bad or missing
- * credential surfaces here as a clear error rather than on a user-facing page.
- * Reports only non-secret identifiers.
+ * Health check. Forces the Firestore client to be created and performs a real
+ * read, so a bad or missing credential surfaces here as a clear error rather
+ * than on a user-facing page. Reports only non-secret identifiers.
  */
 app.get("/api/health", async (c) => {
   const source = credentialSource();
@@ -47,37 +47,6 @@ app.get("/api/health", async (c) => {
       503,
     );
   }
-});
-
-/**
- * TEMPORARY diagnostic: reports why an Authorization token does or does not
- * verify. Remove once the production auth issue is resolved.
- */
-app.get("/api/debug-auth", async (c) => {
-  const header = c.req.header("authorization") ?? "";
-  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  const out: Record<string, unknown> = {
-    hasAuthHeader: Boolean(header),
-    tokenLength: token.length,
-    projectId: env.firebaseProjectId || null,
-  };
-  if (!token) return c.json(out);
-  try {
-    const { getApps, initializeApp } = await import("firebase-admin/app");
-    const { getAuth } = await import("firebase-admin/auth");
-    if (getApps().length === 0) initializeApp({ projectId: env.firebaseProjectId });
-    const decoded = await getAuth().verifyIdToken(token);
-    out.verify = "ok";
-    out.uid = decoded.uid;
-    out.aud = decoded.aud;
-    out.iss = decoded.iss;
-  } catch (err) {
-    out.verify = "failed";
-    out.errorName = err instanceof Error ? err.constructor.name : typeof err;
-    out.errorMessage = err instanceof Error ? err.message : String(err);
-    out.errorCode = (err as { code?: unknown })?.code ?? null;
-  }
-  return c.json(out);
 });
 
 // Handle tRPC + any other /api routes
