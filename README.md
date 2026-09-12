@@ -100,6 +100,18 @@ The Google Cloud side (Workload Identity Pool, OIDC provider, and the
 `roles/iam.workloadIdentityUser` binding scoped to this project's production
 deployments) is a one-time setup done by a project owner.
 
+**Two things that bite during setup:**
+
+1. **The team slug must match exactly.** The Vercel OIDC `iss` claim is
+   `https://oidc.vercel.com/<team-slug>`; Google compares it as an exact string.
+   The same slug also appears in the impersonation binding's subject
+   (`owner:<team-slug>:project:<project>:environment:<environment>`), so a wrong
+   slug breaks both places. Confirm the real slug in the Vercel dashboard, or
+   read it from the error message — the token reports its own issuer.
+2. **The principalSet `attribute.<name>` must be a mapped attribute.** Referencing
+   an attribute you did not declare in `--attribute-mapping` produces an invalid
+   member. This setup maps `attribute.sub=assertion.sub` explicitly for that reason.
+
 Credential resolution order in `server/queries/firestore.ts`:
 
 1. **Emulator** — `FIRESTORE_EMULATOR_HOST` (local dev, no credentials)
