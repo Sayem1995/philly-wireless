@@ -13,6 +13,21 @@ export type FirestoreUser = {
   lastSignInAt?: unknown;
 };
 
+/**
+ * UIDs that should be granted the admin role on sign-in.
+ *
+ * `FIREBASE_ADMIN_UID` is the documented bootstrap variable. `OWNER_UNION_ID`
+ * is the legacy name from the previous auth system — it was the only one
+ * actually consulted, so setting FIREBASE_ADMIN_UID had no effect. Honour both.
+ */
+function adminUids(): string[] {
+  return [env.firebaseAdminUid, env.ownerUnionId].filter(Boolean);
+}
+
+function roleFor(uid: string, fallback: "user" | "admin" = "user"): "user" | "admin" {
+  return adminUids().includes(uid) ? "admin" : fallback;
+}
+
 function mapUser(data: Record<string, unknown>): FirestoreUser {
   return {
     id: Number(data.id ?? 0),
@@ -53,7 +68,7 @@ export async function upsertUser(data: {
       name: data.name ?? existing.name ?? null,
       email: data.email ?? existing.email ?? null,
       avatar: data.avatar ?? existing.avatar ?? null,
-      role: data.role ?? (data.uid === env.ownerUnionId ? "admin" : existing.role ?? "user"),
+      role: data.role ?? roleFor(data.uid, existing.role ?? "user"),
       lastSignInAt: FieldValue.serverTimestamp(),
     });
     return;
@@ -66,7 +81,7 @@ export async function upsertUser(data: {
     name: data.name ?? null,
     email: data.email ?? null,
     avatar: data.avatar ?? null,
-    role: data.role ?? (data.uid === env.ownerUnionId ? "admin" : "user"),
+    role: data.role ?? roleFor(data.uid),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
     lastSignInAt: FieldValue.serverTimestamp(),
