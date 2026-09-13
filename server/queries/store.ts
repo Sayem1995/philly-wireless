@@ -1,4 +1,5 @@
 import type { Query } from "firebase-admin/firestore";
+import { randomBytes } from "node:crypto";
 import { getDb, toDate } from "./firestore.js";
 import { nextId } from "./ids.js";
 
@@ -18,6 +19,7 @@ export const COLLECTIONS = {
   customerNotes: "customerNotes",
   notifications: "notifications",
   parts: "parts",
+  receipts: "receipts",
 } as const;
 
 type Row = Record<string, unknown>;
@@ -171,6 +173,29 @@ export type PartRow = {
   costCents: number;
 };
 
+export type ReceiptLine = { description: string; amountCents: number };
+
+export type ReceiptRow = {
+  id: number;
+  /** Random capability token used for the customer's public view link. */
+  token: string;
+  bookingId: number | null;
+  customerId: number | null;
+  customerName: string;
+  phone: string;
+  email: string | null;
+  device: string;
+  repairType: string;
+  lines: ReceiptLine[];
+  subtotalCents: number;
+  taxCents: number;
+  totalCents: number;
+  paymentMethod: string;
+  paidAt: string;
+  notes: string | null;
+  createdAt: Date;
+};
+
 /* ---------- mappers ---------- */
 
 function mapRepairPrice(r: Row): RepairPriceRow {
@@ -292,6 +317,32 @@ function mapPart(r: Row): PartRow {
     stock: Number(r.stock ?? 0),
     lowStockAt: Number(r.lowStockAt ?? 5),
     costCents: Number(r.costCents ?? 0),
+  };
+}
+
+function mapReceipt(r: Row): ReceiptRow {
+  const rawLines = Array.isArray(r.lines) ? (r.lines as Row[]) : [];
+  return {
+    id: Number(r.id),
+    token: String(r.token ?? ""),
+    bookingId: r.bookingId == null ? null : Number(r.bookingId),
+    customerId: r.customerId == null ? null : Number(r.customerId),
+    customerName: String(r.customerName ?? ""),
+    phone: String(r.phone ?? ""),
+    email: r.email == null ? null : String(r.email),
+    device: String(r.device ?? ""),
+    repairType: String(r.repairType ?? ""),
+    lines: rawLines.map((l) => ({
+      description: String(l.description ?? ""),
+      amountCents: Number(l.amountCents ?? 0),
+    })),
+    subtotalCents: Number(r.subtotalCents ?? 0),
+    taxCents: Number(r.taxCents ?? 0),
+    totalCents: Number(r.totalCents ?? 0),
+    paymentMethod: String(r.paymentMethod ?? ""),
+    paidAt: String(r.paidAt ?? ""),
+    notes: r.notes == null ? null : String(r.notes),
+    createdAt: toDate(r.createdAt) ?? new Date(),
   };
 }
 
@@ -486,5 +537,34 @@ export const store = {
   },
   async deletePart(id: number): Promise<void> {
     await deleteRow(COLLECTIONS.parts, id);
+  },
+
+  // Payment receipts
+  async createReceipt(
+    data: Omit<ReceiptRow, "id" | "createdAt" | "token">,
+  ): Promise<ReceiptRow> {
+    // Capability token: anyone holding the link can view that one receipt, so
+    // it must be unguessable rather than a sequential id.
+    const token = randomBytes(24).toString("base64url");
+    const row = await createRow(COLLECTIONS.receipts, { ...data, token });
+    return mapReceipt(row);
+  },
+  async receipts(): Promise<ReceiptRow[]> {
+    const rows = await listRows(COLLECTIONS.receipts);
+    return rows
+      .map(mapReceipt)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  },
+  async receiptByToken(token: string): Promise<ReceiptRow | undefined> {
+    if (!token) return undefined;
+    const rows = await queryWhere(COLLECTIONS.receipts, "token", token);
+    return rows.length ? mapReceipt(rows[0]) : undefined;
+  },
+  async receiptByBooking(bookingId: number): Promise<ReceiptRow | undefined> {
+    const rows = await queryWhere(COLLECTIONS.receipts, "bookingId", bookingId);
+    return rows.length ? mapReceipt(rows[0]) : undefined;
+  },
+  async deleteReceipt(id: number): Promise<void> {
+    await deleteRow(COLLECTIONS.receipts, id);
   },
 };

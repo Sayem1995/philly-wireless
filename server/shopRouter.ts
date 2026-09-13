@@ -76,6 +76,29 @@ export const shopRouter = createRouter({
       return TIME_SLOTS.map((s) => ({ slot: s, available: !takenSet.has(s) }));
     }),
 
+  /* ---------- payment receipt (public, by capability token) ---------- */
+  receiptByToken: publicQuery
+    .input(z.object({ token: z.string().min(10).max(200) }))
+    .query(async ({ input }) => {
+      // A receipt is only readable with its unguessable token — the customer's
+      // link is the authorisation.
+      const r = await store.receiptByToken(input.token);
+      if (!r) return null;
+      return {
+        id: r.id,
+        customerName: r.customerName,
+        device: r.device,
+        repairType: r.repairType,
+        lines: r.lines,
+        subtotalCents: r.subtotalCents,
+        taxCents: r.taxCents,
+        totalCents: r.totalCents,
+        paymentMethod: r.paymentMethod,
+        paidAt: r.paidAt,
+        notes: r.notes,
+      };
+    }),
+
   /* ---------- booking: create ---------- */
   book: publicQuery
     .input(

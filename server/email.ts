@@ -33,7 +33,38 @@ export async function sendEmail(opts: {
   subject: string;
   html: string;
 }): Promise<{ delivered: boolean }> {
-  // Preferred: SendGrid Web API (HTTPS — works where SMTP ports are blocked)
+  // ── Preferred: Brevo transactional email API (HTTPS) ──────────
+  // Brevo's free tier (300/day) is generous, and going over HTTPS avoids
+  // relying on outbound SMTP ports from a serverless function, which some
+  // hosts throttle or block.
+  const brevoKey = process.env.BREVO_API_KEY;
+  if (brevoKey) {
+    const from = process.env.BREVO_FROM ?? process.env.SMTP_FROM ?? process.env.SMTP_USER ?? STORE.email;
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": brevoKey,
+        "Content-Type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: { email: from, name: STORE.name },
+        to: [{ email: opts.to }],
+        subject: opts.subject,
+        htmlContent: opts.html,
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[brevo] ${res.status}: ${errText}`);
+      throw new Error(`Brevo error ${res.status}`);
+    }
+    return { delivered: true };
+  }
+
+  // Alternative: SendGrid Web API (HTTPS). NOTE: SendGrid no longer has a
+  // free tier — it is a 60-day trial then a paid plan, so Brevo is preferred
+  // for low-volume shops.
   const sgKey = process.env.SENDGRID_API_KEY;
   if (sgKey) {
     const from = process.env.SENDGRID_FROM ?? process.env.SMTP_USER ?? STORE.email;
@@ -138,5 +169,64 @@ export function staffNotificationHtml(b: {
         ${b.notes ? row("Notes", b.notes) : ""}
       </table>
     </div>`,
+  );
+}
+
+/* ---------- payment receipt ---------- */
+
+export function money(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+export function receiptHtml(r: {
+  id: number;
+  customerName: string;
+  device: string;
+  repairType: string;
+  lines: { description: string; amountCents: number }[];
+  subtotalCents: number;
+  taxCents: number;
+  totalCents: number;
+  paymentMethod: string;
+  paidAt: string;
+  notes?: string | null;
+  url?: string | null;
+}) {
+  const rows = r.lines
+    .map((l) => row(l.description, money(l.amountCents)))
+    .join("");
+  const taxRow = r.taxCents > 0 ? row("Tax", money(r.taxCents)) : "";
+
+  return shell(
+    "Payment receipt",
+    `<p style="text-align:center;color:#8a7168;font-size:14px;margin:0 0 20px;">
+      Hi ${r.customerName.split(" ")[0]}, thank you — here is your receipt for the repair of your ${r.device}.
+    </p>
+    <div style="background:#fff;border:1px solid #F3D5D8;border-radius:16px;padding:24px;">
+      <table style="width:100%;border-collapse:collapse;">
+        ${row("Receipt", `#PPR-R${r.id}`)}
+        ${row("Date paid", r.paidAt)}
+        ${row("Device", r.device)}
+        ${row("Repair", r.repairType)}
+        ${row("Payment method", r.paymentMethod)}
+      </table>
+      <div style="border-top:1px solid #F3D5D8;margin:18px 0;"></div>
+      <table style="width:100%;border-collapse:collapse;">
+        ${rows}
+        ${taxRow}
+      </table>
+      <div style="border-top:2px solid #F3D5D8;margin:18px 0;"></div>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td style="font-size:16px;color:#2B1A18;font-weight:bold;">Total paid</td>
+          <td style="text-align:right;font-size:20px;color:#7F1D1D;font-weight:bold;">${money(r.totalCents)}</td>
+        </tr>
+      </table>
+    </div>
+    ${r.notes ? `<p style="color:#8a7168;font-size:13px;margin:16px 0 0;">${r.notes}</p>` : ""}
+    ${r.url ? `<p style="text-align:center;margin:22px 0 0;"><a href="${r.url}" style="background:#7F1D1D;color:#FFFDF7;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">View or print this receipt</a></p>` : ""}
+    <p style="color:#8a7168;font-size:12px;line-height:1.7;margin:22px 0 0;text-align:center;">
+      Keep this for your records — it also covers any warranty claim.
+    </p>`,
   );
 }

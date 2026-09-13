@@ -12,6 +12,7 @@ import Faq from "./pages/Faq"
 import Blog from "./pages/Blog"
 import BlogPost from "./pages/BlogPost"
 import Login from "./pages/Login"
+import Receipt from "./pages/Receipt"
 import NotFound from "./pages/NotFound"
 import AdminLayout from "./pages/admin/AdminLayout"
 import Dashboard from "./pages/admin/Dashboard"
@@ -39,6 +40,8 @@ export default function App() {
         <Route path="/blog/:slug" element={<BlogPost />} />
       </Route>
       <Route path="/login" element={<Login />} />
+      {/* Customer receipts open from an emailed link; standalone so they print cleanly. */}
+      <Route path="/receipt/:token" element={<Receipt />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="bookings" element={<AdminBookings />} />

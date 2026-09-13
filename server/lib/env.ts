@@ -40,4 +40,8 @@ export const env = {
   gcpWorkloadIdentityPoolId: optional("GCP_WORKLOAD_IDENTITY_POOL_ID"),
   gcpWorkloadIdentityProviderId: optional("GCP_WORKLOAD_IDENTITY_PROVIDER_ID"),
   gcpServiceAccountEmail: optional("GCP_SERVICE_ACCOUNT_EMAIL"),
+
+  // ── Public site URL (for links in emails, e.g. customer receipts) ──
+  // Override in Vercel when the domain changes.
+  publicSiteUrl: optional("PUBLIC_SITE_URL") || "https://philly-wireless.vercel.app",
 };

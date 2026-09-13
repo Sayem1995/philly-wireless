@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { createRouter, adminQuery } from "./middleware.js";
 import { store } from "./queries/store.js";
+import { sendEmail, receiptHtml } from "./email.js";
+import { env } from "./lib/env.js";
+import { STORE } from "../contracts/constants.js";
 import {
   notifyCustomer,
   type CustomerNotificationKind,
@@ -118,6 +121,127 @@ export const adminRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await store.deleteBooking(input.id);
+      return { ok: true };
+    }),
+
+  /* ---------- payment receipts ---------- */
+  receipts: adminQuery.query(async () => {
+    return store.receipts();
+  }),
+
+  receiptForBooking: adminQuery
+    .input(z.object({ bookingId: z.number() }))
+    .query(async ({ input }) => {
+      return (await store.receiptByBooking(input.bookingId)) ?? null;
+    }),
+
+  /** Record a payment against a booking and issue the customer a receipt. */
+  createReceipt: adminQuery
+    .input(
+      z.object({
+        bookingId: z.number(),
+        lines: z
+          .array(
+            z.object({
+              description: z.string().min(1).max(120),
+              amountCents: z.number().int().min(0).max(10_000_000),
+            }),
+          )
+          .min(1)
+          .max(10),
+        taxCents: z.number().int().min(0).max(1_000_000).optional(),
+        paymentMethod: z.enum(["cash", "card", "zelle", "check", "other"]),
+        paidAt: z.string().min(8).optional(),
+        notes: z.string().max(600).optional(),
+        emailCustomer: z.boolean().optional(),
+        markCompleted: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const booking = await store.getBooking(input.bookingId);
+      if (!booking) throw new Error("Booking not found.");
+
+      const lines = input.lines.map((l) => ({
+        description: l.description.trim(),
+        amountCents: l.amountCents,
+      }));
+      const subtotalCents = lines.reduce((sum, l) => sum + l.amountCents, 0);
+      const taxCents = input.taxCents ?? 0;
+      const totalCents = subtotalCents + taxCents;
+      const paidAt = input.paidAt || new Date().toISOString().slice(0, 10);
+
+      const receipt = await store.createReceipt({
+        bookingId: booking.id,
+        customerId: booking.customerId,
+        customerName: booking.customerName,
+        phone: booking.phone,
+        email: booking.email,
+        device: booking.device,
+        repairType: booking.repairType,
+        lines,
+        subtotalCents,
+        taxCents,
+        totalCents,
+        paymentMethod: input.paymentMethod,
+        paidAt,
+        notes: input.notes?.trim() || null,
+      });
+
+      // Optionally close the booking out at the same time.
+      if (input.markCompleted && booking.status !== "completed") {
+        await store.updateBooking(booking.id, { status: "completed" } as never);
+      }
+
+      const url = env.publicSiteUrl
+        ? `${env.publicSiteUrl.replace(/\/$/, "")}/receipt/${receipt.token}`
+        : null;
+
+      let emailed = false;
+      if (input.emailCustomer !== false && booking.email) {
+        try {
+          const r = await sendEmail({
+            to: booking.email,
+            subject: `Payment receipt #PPR-R${receipt.id} — ${STORE.name}`,
+            html: receiptHtml({
+              id: receipt.id,
+              customerName: receipt.customerName,
+              device: receipt.device,
+              repairType: receipt.repairType,
+              lines: receipt.lines,
+              subtotalCents,
+              taxCents,
+              totalCents,
+              paymentMethod: receipt.paymentMethod,
+              paidAt: receipt.paidAt,
+              notes: receipt.notes,
+              url,
+            }),
+          });
+          emailed = r.delivered;
+          await store.addNotification({
+            bookingId: booking.id,
+            customerId: booking.customerId,
+            channel: "email",
+            message: `Receipt #PPR-R${receipt.id} for ${(totalCents / 100).toFixed(2)}${r.delivered ? " (sent)" : " (queued — email not configured)"}`,
+          });
+        } catch (err) {
+          console.error("[receipt] email failed:", err);
+          await store.addNotification({
+            bookingId: booking.id,
+            customerId: booking.customerId,
+            channel: "email",
+            message: `Receipt #PPR-R${receipt.id} (failed — ${err instanceof Error ? err.message : "unknown error"})`,
+          });
+        }
+      }
+
+      return { ok: true, id: receipt.id, totalCents, emailed, url };
+    }),
+
+  deleteReceipt: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await store.deleteReceipt(input.id);
       return { ok: true };
     }),
 

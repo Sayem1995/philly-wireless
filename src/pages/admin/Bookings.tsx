@@ -91,6 +91,7 @@ export default function Bookings() {
             <input defaultValue={booking.priceEstimate ?? ""} placeholder="$…" onBlur={(e) => e.target.value !== (booking.priceEstimate ?? "") && update.mutate({ id: booking.id, priceEstimate: e.target.value })} className={`${input} w-full mb-4`} />
             <label className="block text-xs uppercase tracking-wider text-ink/45 mb-2">Warranty until</label>
             <input type="date" defaultValue={booking.warrantyUntil ?? ""} onChange={(e) => e.target.value && update.mutate({ id: booking.id, warrantyUntil: e.target.value })} className={`${input} w-full mb-6`} />
+            <ReceiptForm booking={booking} />
             <h3 className="font-serif text-lg mb-3">Notify customer</h3>
             <div className="flex gap-2 mb-2">
               {(["sms", "email", "call"] as const).map((c) => (
@@ -106,6 +107,125 @@ export default function Bookings() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Record a payment and issue the customer a receipt. */
+function ReceiptForm({
+  booking,
+}: {
+  booking: { id: number; repairType: string; email: string | null; status: string };
+}) {
+  const utils = trpc.useUtils();
+  const [repair, setRepair] = useState("");
+  const [extraLabel, setExtraLabel] = useState("Parts");
+  const [extra, setExtra] = useState("");
+  const [tax, setTax] = useState("");
+  const [method, setMethod] = useState<"cash" | "card" | "zelle" | "check" | "other">("cash");
+  const [notes, setNotes] = useState("");
+  const [emailIt, setEmailIt] = useState(true);
+  const [complete, setComplete] = useState(booking.status !== "completed");
+
+  const { data: existing } = trpc.admin.receiptForBooking.useQuery({ bookingId: booking.id });
+
+  const create = trpc.admin.createReceipt.useMutation({
+    onSuccess: (r) => {
+      void utils.admin.receipts.invalidate();
+      void utils.admin.receiptForBooking.invalidate();
+      void utils.admin.bookings.invalidate();
+      void utils.admin.stats.invalidate();
+      toast.success(
+        r.emailed
+          ? `Receipt #PPR-R${r.id} emailed to the customer`
+          : `Receipt #PPR-R${r.id} saved — email queued (not configured)`,
+      );
+      setRepair(""); setExtra(""); setTax(""); setNotes("");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const input = "border border-ink/15 rounded-xl px-3.5 py-2.5 text-sm bg-ivory focus:outline-none focus:border-burgundy";
+  const toCents = (v: string) => Math.round(Number.parseFloat(v || "0") * 100) || 0;
+
+  const lines = [
+    ...(toCents(repair) > 0 ? [{ description: booking.repairType, amountCents: toCents(repair) }] : []),
+    ...(toCents(extra) > 0 ? [{ description: extraLabel.trim() || "Additional", amountCents: toCents(extra) }] : []),
+  ];
+  const totalCents = lines.reduce((s, l) => s + l.amountCents, 0) + toCents(tax);
+
+  return (
+    <div className="border-t border-blush pt-5 mb-6">
+      <h3 className="font-serif text-lg mb-1">Payment &amp; receipt</h3>
+      <p className="text-xs text-ink/45 mb-4">
+        Record what the customer paid and email them a receipt they can view or print.
+      </p>
+
+      {existing && (
+        <p className="text-xs bg-emerald-50 text-emerald-800 rounded-xl px-3.5 py-2.5 mb-4">
+          Receipt #PPR-R{existing.id} already issued for this booking ({existing.paidAt}).
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-ink/45 mb-1.5">Repair charge</label>
+          <input inputMode="decimal" value={repair} onChange={(e) => setRepair(e.target.value)} placeholder="129.00" className={`${input} w-full`} />
+        </div>
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-ink/45 mb-1.5">Tax (optional)</label>
+          <input inputMode="decimal" value={tax} onChange={(e) => setTax(e.target.value)} placeholder="0.00" className={`${input} w-full`} />
+        </div>
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-ink/45 mb-1.5">Extra label</label>
+          <input value={extraLabel} onChange={(e) => setExtraLabel(e.target.value)} className={`${input} w-full`} />
+        </div>
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-ink/45 mb-1.5">Extra charge</label>
+          <input inputMode="decimal" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="0.00" className={`${input} w-full`} />
+        </div>
+      </div>
+
+      <label className="block text-[11px] uppercase tracking-wider text-ink/45 mb-1.5">Payment method</label>
+      <select value={method} onChange={(e) => setMethod(e.target.value as typeof method)} className={`${input} w-full mb-3`}>
+        {(["cash", "card", "zelle", "check", "other"] as const).map((m) => (
+          <option key={m} value={m}>{m}</option>
+        ))}
+      </select>
+
+      <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Note on the receipt (optional)" className={`${input} w-full mb-3`} />
+
+      <label className="flex items-center gap-2.5 text-sm text-ink/70 mb-2">
+        <input type="checkbox" checked={emailIt} onChange={(e) => setEmailIt(e.target.checked)} disabled={!booking.email} />
+        Email the receipt{booking.email ? ` to ${booking.email}` : " (no email on file)"}
+      </label>
+      <label className="flex items-center gap-2.5 text-sm text-ink/70 mb-4">
+        <input type="checkbox" checked={complete} onChange={(e) => setComplete(e.target.checked)} />
+        Mark the repair as completed
+      </label>
+
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-sm text-ink/50">Total</span>
+        <span className="font-serif text-2xl text-burgundy">${(totalCents / 100).toFixed(2)}</span>
+      </div>
+
+      <button
+        disabled={lines.length === 0 || create.isPending}
+        onClick={() =>
+          create.mutate({
+            bookingId: booking.id,
+            lines,
+            taxCents: toCents(tax),
+            paymentMethod: method,
+            notes: notes.trim() || undefined,
+            emailCustomer: emailIt,
+            markCompleted: complete,
+          })
+        }
+        className="w-full bg-ink text-ivory font-semibold py-3 rounded-full hover:bg-ink/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {create.isPending ? "Issuing…" : "Record payment & issue receipt"}
+      </button>
     </div>
   );
 }

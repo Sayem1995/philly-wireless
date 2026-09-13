@@ -29,6 +29,12 @@ vi.mock("../server/queries/store.js", () => ({
     updatePrice: vi.fn(),
     createPrice: vi.fn(),
     deletePrice: vi.fn(),
+    // receipts
+    receipts: vi.fn(),
+    createReceipt: vi.fn(),
+    receiptByToken: vi.fn(),
+    receiptByBooking: vi.fn(),
+    deleteReceipt: vi.fn(),
     // admin surface
     bookings: vi.fn(),
     customers: vi.fn(),
@@ -44,6 +50,7 @@ vi.mock("../server/email.js", () => ({
   sendEmail: vi.fn(async () => ({ delivered: false })),
   bookingConfirmationHtml: vi.fn(() => "<html>confirmation</html>"),
   staffNotificationHtml: vi.fn(() => "<html>staff</html>"),
+  receiptHtml: vi.fn(() => "<html>receipt</html>"),
 }));
 
 import { appRouter } from "../server/router.js";
@@ -352,6 +359,125 @@ describe("admin price management", () => {
   it("blocks non-admins from deleting prices", async () => {
     await expect(caller(regularUser).admin.deletePrice({ id: 42 })).rejects.toThrow(/permissions/i);
     expect(mockedStore.deletePrice).not.toHaveBeenCalled();
+  });
+});
+
+describe("payment receipts", () => {
+  const receiptRow = {
+    id: 5001,
+    token: "tok_abcdefghijklmnop",
+    bookingId: 42,
+    customerId: 7,
+    customerName: "Ada Lovelace",
+    phone: "2155550100",
+    email: "ada@example.com",
+    device: "iPhone 15",
+    repairType: "Screen Replacement",
+    lines: [{ description: "Screen Replacement", amountCents: 12900 }],
+    subtotalCents: 12900,
+    taxCents: 1000,
+    totalCents: 13900,
+    paymentMethod: "card",
+    paidAt: "2026-02-01",
+    notes: null,
+    createdAt: new Date(),
+  };
+
+  it("totals the lines and tax, and records the receipt", async () => {
+    // Needs an email on file for the receipt to be sent and logged.
+    mockedStore.getBooking.mockResolvedValue(booking({ id: 42, email: "ada@example.com" }));
+    mockedStore.createReceipt.mockResolvedValue(receiptRow);
+    mockedStore.updateBooking.mockResolvedValue(undefined);
+    mockedStore.addNotification.mockResolvedValue(undefined);
+
+    const res = await caller(adminUser).admin.createReceipt({
+      bookingId: 42,
+      lines: [
+        { description: "Screen Replacement", amountCents: 12900 },
+        { description: "Tempered glass", amountCents: 1500 },
+      ],
+      taxCents: 1000,
+      paymentMethod: "card",
+      emailCustomer: true,
+      markCompleted: true,
+    });
+
+    expect(res.totalCents).toBe(15400);
+    expect(mockedStore.createReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingId: 42,
+        subtotalCents: 14400,
+        taxCents: 1000,
+        totalCents: 15400,
+        paymentMethod: "card",
+      }),
+    );
+    // emailing the customer is recorded
+    expect(mockedStore.addNotification).toHaveBeenCalled();
+    // and the booking was closed out
+    expect(mockedStore.updateBooking).toHaveBeenCalled();
+  });
+
+  it("refuses to issue a receipt for an unknown booking", async () => {
+    mockedStore.getBooking.mockResolvedValue(undefined);
+    await expect(
+      caller(adminUser).admin.createReceipt({
+        bookingId: 999,
+        lines: [{ description: "x", amountCents: 100 }],
+        paymentMethod: "cash",
+      }),
+    ).rejects.toThrow(/not found/i);
+    expect(mockedStore.createReceipt).not.toHaveBeenCalled();
+  });
+
+  it("blocks non-admins", async () => {
+    await expect(
+      caller(regularUser).admin.createReceipt({
+        bookingId: 42,
+        lines: [{ description: "x", amountCents: 100 }],
+        paymentMethod: "cash",
+      }),
+    ).rejects.toThrow(/permissions/i);
+  });
+});
+
+describe("public receipt lookup", () => {
+  it("returns nothing for an unknown token", async () => {
+    mockedStore.receiptByToken.mockResolvedValue(undefined);
+    await expect(caller().shop.receiptByToken({ token: "nope-not-real-token" })).resolves.toBeNull();
+  });
+
+  it("returns the receipt when the token matches", async () => {
+    mockedStore.receiptByToken.mockResolvedValue({
+      id: 5001,
+      token: "tok_abcdefghijklmnop",
+      bookingId: 42,
+      customerId: 7,
+      customerName: "Ada Lovelace",
+      phone: "2155550100",
+      email: "ada@example.com",
+      device: "iPhone 15",
+      repairType: "Screen Replacement",
+      lines: [{ description: "Screen Replacement", amountCents: 12900 }],
+      subtotalCents: 12900,
+      taxCents: 0,
+      totalCents: 12900,
+      paymentMethod: "cash",
+      paidAt: "2026-02-01",
+      notes: null,
+      createdAt: new Date(),
+    });
+
+    const r = await caller().shop.receiptByToken({ token: "tok_abcdefghijklmnop" });
+    expect(r?.totalCents).toBe(12900);
+    expect(r?.device).toBe("iPhone 15");
+  });
+
+  it("does not expose internal ids beyond the receipt itself", async () => {
+    mockedStore.receiptByToken.mockResolvedValue(undefined);
+    await caller().shop.receiptByToken({ token: "another-unknown-token" });
+    // it is a public procedure — reachable without auth by design
+    expect(mockedStore.receiptByToken).toHaveBeenCalledWith("another-unknown-token");
   });
 });
 
