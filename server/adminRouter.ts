@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { createRouter, adminQuery } from "./middleware.js";
 import { store } from "./queries/store.js";
-import { sendEmail, receiptHtml } from "./email.js";
+import { sendEmail, receiptHtml, messageHtml } from "./email.js";
+import { sendSms } from "./sms.js";
 import { env } from "./lib/env.js";
 import { STORE } from "../contracts/constants.js";
 import {
@@ -256,13 +257,90 @@ export const adminRouter = createRouter({
       }),
     )
     .mutation(async ({ input }) => {
+      // Work out how to reach the customer. Previously this only wrote a log
+      // row while the UI reported "sent" — so a message could look delivered
+      // when nothing had left the building.
+      let toEmail: string | null = null;
+      let toPhone: string | null = null;
+      const bookingId = input.bookingId ?? null;
+      let customerId = input.customerId ?? null;
+
+      if (input.bookingId !== undefined) {
+        const b = await store.getBooking(input.bookingId);
+        if (b) {
+          toEmail = b.email;
+          toPhone = b.phone;
+          customerId = customerId ?? b.customerId;
+        }
+      }
+      if (!toEmail && !toPhone && input.customerId !== undefined) {
+        const c = await store.getCustomer(input.customerId);
+        if (c) {
+          toEmail = c.email;
+          toPhone = c.phone;
+        }
+      }
+
+      // A phone call is made by a human — there is nothing to dispatch.
+      if (input.channel === "call") {
+        await store.addNotification({
+          bookingId,
+          customerId,
+          channel: "call",
+          message: `${input.message} (logged — call to be made by staff)`,
+        });
+        return { ok: true, delivered: false, channel: "call" as const, reason: "manual" as const };
+      }
+
+      let delivered = false;
+      let reason: "sent" | "not_configured" | "failed" | "no_contact" = "no_contact";
+
+      if (input.channel === "email") {
+        if (toEmail) {
+          try {
+            const r = await sendEmail({
+              to: toEmail,
+              subject: `${STORE.name} — about your repair`,
+              html: messageHtml(input.message),
+            });
+            delivered = r.delivered;
+            reason = r.delivered ? "sent" : "not_configured";
+          } catch (err) {
+            console.error("[notify] admin email failed:", err);
+            reason = "failed";
+          }
+        }
+      } else if (toPhone) {
+        try {
+          const r = await sendSms({
+            to: toPhone,
+            body: `${STORE.name}: ${input.message}`,
+          });
+          delivered = r.delivered;
+          reason = r.delivered ? "sent" : "not_configured";
+        } catch (err) {
+          console.error("[notify] admin sms failed:", err);
+          reason = "failed";
+        }
+      }
+
+      const outcome =
+        reason === "sent"
+          ? "(sent)"
+          : reason === "no_contact"
+            ? "(not sent — no email/phone on file for this customer)"
+            : reason === "failed"
+              ? "(failed — check provider configuration)"
+              : `(queued — ${input.channel} not configured)`;
+
       await store.addNotification({
-        bookingId: input.bookingId ?? null,
-        customerId: input.customerId ?? null,
+        bookingId,
+        customerId,
         channel: input.channel,
-        message: input.message,
+        message: `${input.message} ${outcome}`,
       });
-      return { ok: true };
+
+      return { ok: true, delivered, channel: input.channel, reason };
     }),
 
   /* ---------- customers ---------- */

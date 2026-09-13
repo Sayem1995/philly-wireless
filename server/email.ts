@@ -178,6 +178,24 @@ export function money(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+/** Escape user/admin-supplied text before putting it in an HTML email. */
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Wrap a free-text message (from the admin panel) in the branded shell. */
+export function messageHtml(body: string): string {
+  return shell(
+    "A message from Philly Phone Repair",
+    `<div style="background:#fff;border:1px solid #F3D5D8;border-radius:16px;padding:24px;color:#2B1A18;font-size:15px;line-height:1.7;white-space:pre-wrap;">${escapeHtml(body)}</div>`,
+  );
+}
+
 export function receiptHtml(r: {
   id: number;
   customerName: string;

@@ -481,6 +481,72 @@ describe("public receipt lookup", () => {
   });
 });
 
+describe("admin.notify actually dispatches", () => {
+  it("sends an email when the customer has one", async () => {
+    mockedStore.getBooking.mockResolvedValue(booking({ id: 42, email: "ada@example.com" }));
+    mockedStore.addNotification.mockResolvedValue(undefined);
+    mockedSendEmail.mockResolvedValue({ delivered: true });
+
+    const res = await caller(adminUser).admin.notify({
+      bookingId: 42,
+      channel: "email",
+      message: "It's all done",
+    });
+
+    expect(mockedSendEmail).toHaveBeenCalledOnce();
+    expect(res).toMatchObject({ ok: true, delivered: true, channel: "email", reason: "sent" });
+    // the outcome is recorded in the CRM history
+    const msg = (mockedStore.addNotification.mock.calls[0][0] as { message: string }).message;
+    expect(msg).toContain("(sent)");
+  });
+
+  it("reports not-configured rather than claiming it was sent", async () => {
+    mockedStore.getBooking.mockResolvedValue(booking({ id: 42, email: "ada@example.com" }));
+    mockedStore.addNotification.mockResolvedValue(undefined);
+    mockedSendEmail.mockResolvedValue({ delivered: false });
+
+    const res = await caller(adminUser).admin.notify({
+      bookingId: 42,
+      channel: "email",
+      message: "Ready for pickup",
+    });
+
+    expect(res).toMatchObject({ delivered: false, reason: "not_configured" });
+    const msg = (mockedStore.addNotification.mock.calls[0][0] as { message: string }).message;
+    expect(msg).toContain("queued");
+  });
+
+  it("treats a phone call as manual — nothing to dispatch", async () => {
+    mockedStore.getBooking.mockResolvedValue(booking({ id: 42 }));
+    mockedStore.addNotification.mockResolvedValue(undefined);
+
+    const res = await caller(adminUser).admin.notify({
+      bookingId: 42,
+      channel: "call",
+      message: "Called, no answer",
+    });
+
+    expect(mockedSendEmail).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ delivered: false, reason: "manual" });
+  });
+
+  it("says so when there is no way to reach the customer", async () => {
+    mockedStore.getBooking.mockResolvedValue(booking({ id: 42, email: null, phone: "" }));
+    mockedStore.addNotification.mockResolvedValue(undefined);
+
+    const res = await caller(adminUser).admin.notify({
+      bookingId: 42,
+      channel: "email",
+      message: "hello",
+    });
+
+    expect(mockedSendEmail).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ reason: "no_contact" });
+    const msg = (mockedStore.addNotification.mock.calls[0][0] as { message: string }).message;
+    expect(msg).toContain("no email/phone");
+  });
+});
+
 describe("admin.updateBooking warranty rules", () => {
   /**
    * The warranty date is stored date-only (`toISOString().slice(0, 10)`), so

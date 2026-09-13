@@ -15,18 +15,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Customer-facing submissions — create allowed, read/write via backend only
+    // Customer-facing submissions. The browser never writes these directly —
+    // bookings, contact messages and newsletter signups all go through
+    // /api/trpc, which validates input server-side and writes with the Admin
+    // SDK (which bypasses these rules). Allowing public create here would let
+    // anyone with the public web config write unvalidated documents straight
+    // into the CRM — including bookings that fill every slot to block real
+    // customers — so it is denied.
     match /bookings/{id} {
-      allow create: if true;
-      allow read, update, delete: if false;
+      allow read, write: if false;
     }
     match /messages/{id} {
-      allow create: if true;
-      allow read, update, delete: if false;
+      allow read, write: if false;
     }
     match /subscribers/{id} {
-      allow create: if true;
-      allow read, update, delete: if false;
+      allow read, write: if false;
     }
 
     // Admin/CRM data — backend (Firebase Functions with admin SDK) only.

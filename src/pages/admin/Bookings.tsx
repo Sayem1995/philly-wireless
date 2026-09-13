@@ -21,7 +21,18 @@ export default function Bookings() {
   const { data } = trpc.admin.bookings.useQuery({ status: filter });
   const refresh = () => utils.admin.bookings.invalidate();
   const update = trpc.admin.updateBooking.useMutation({ onSuccess: () => { refresh(); utils.admin.stats.invalidate(); toast.success("Booking updated"); } });
-  const notify = trpc.admin.notify.useMutation({ onSuccess: () => { toast.success("Notification logged & sent"); setNote({ channel: "sms", message: "" }); } });
+  const notify = trpc.admin.notify.useMutation({
+    onSuccess: (r) => {
+      if (r.delivered) toast.success("Message sent to the customer");
+      else if (r.reason === "manual") toast.success("Logged — you'll make this call yourself");
+      else if (r.reason === "no_contact") toast.error("Nothing sent — this customer has no email or phone on file");
+      else if (r.reason === "failed") toast.error("Send failed — check the provider settings and the notification log");
+      else toast.warning(`${r.channel === "email" ? "Email" : "SMS"} isn't configured yet — the message was logged but not sent`);
+      setNote({ channel: "sms", message: "" });
+      utils.admin.stats.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   const booking = data?.find((b) => b.id === sel);
   const input = "border border-ink/15 rounded-xl px-3.5 py-2.5 text-sm bg-ivory focus:outline-none focus:border-burgundy";
@@ -92,7 +103,10 @@ export default function Bookings() {
             <label className="block text-xs uppercase tracking-wider text-ink/45 mb-2">Warranty until</label>
             <input type="date" defaultValue={booking.warrantyUntil ?? ""} onChange={(e) => e.target.value && update.mutate({ id: booking.id, warrantyUntil: e.target.value })} className={`${input} w-full mb-6`} />
             <ReceiptForm booking={booking} />
-            <h3 className="font-serif text-lg mb-3">Notify customer</h3>
+            <h3 className="font-serif text-lg mb-1">Message the customer</h3>
+            <p className="text-xs text-ink/45 mb-3">
+              Sent immediately by {note.channel === "call" ? "— a call is yours to make; we just log it" : note.channel === "email" ? "email" : "text message"}.
+            </p>
             <div className="flex gap-2 mb-2">
               {(["sms", "email", "call"] as const).map((c) => (
                 <button key={c} onClick={() => setNote({ ...note, channel: c })}
@@ -102,7 +116,7 @@ export default function Bookings() {
             <textarea rows={3} value={note.message} onChange={(e) => setNote({ ...note, message: e.target.value })} placeholder="Message to customer…" className={`${input} w-full resize-none mb-3`} />
             <button onClick={() => note.message && notify.mutate({ bookingId: booking.id, customerId: booking.customerId ?? undefined, channel: note.channel, message: note.message })}
               className="w-full bg-burgundy text-ivory font-semibold py-3 rounded-full hover:bg-burgundy-dark transition-colors inline-flex items-center justify-center gap-2">
-              <Send size={15} /> Send Notification
+              <Send size={15} /> {note.channel === "call" ? "Log this call" : "Send to customer"}
             </button>
           </div>
         </div>
