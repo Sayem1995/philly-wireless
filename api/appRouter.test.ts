@@ -51,6 +51,9 @@ vi.mock("../server/email.js", () => ({
   bookingConfirmationHtml: vi.fn(() => "<html>confirmation</html>"),
   staffNotificationHtml: vi.fn(() => "<html>staff</html>"),
   receiptHtml: vi.fn(() => "<html>receipt</html>"),
+  messageHtml: vi.fn(() => "<html>message</html>"),
+  escapeHtml: vi.fn((s: string) => s),
+  money: vi.fn((c: number) => `$${(c / 100).toFixed(2)}`),
 }));
 
 import { appRouter } from "../server/router.js";
