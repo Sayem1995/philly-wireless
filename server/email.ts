@@ -15,11 +15,26 @@ import { STORE } from "../contracts/constants.js";
  * caller logs the message into the CRM communication history instead.
  */
 function getTransport() {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  // Trim and de-quote: values pasted into a hosting dashboard very often pick up
+  // a trailing space/newline or wrapping quotes, which makes an otherwise
+  // correct SMTP password fail with "535 Username and Password not accepted".
+  const clean = (v: string | undefined) => (v ?? "").trim().replace(/^["']|["']$/g, "");
+  const host = clean(process.env.SMTP_HOST);
+  const user = clean(process.env.SMTP_USER);
+  const pass = clean(process.env.SMTP_PASS);
   if (!host || !user || !pass) return null;
-  const port = Number(process.env.SMTP_PORT ?? 465);
+  const port = Number(clean(process.env.SMTP_PORT) || 465);
+
+  // Google App Passwords are exactly 16 characters. Logging only the LENGTH
+  // (never the value) turns "Invalid login" into a precise diagnosis: a longer
+  // value means the account password was used instead of an App Password.
+  if (/gmail\.com$/i.test(host) && pass.length !== 16) {
+    console.warn(
+      `[email] SMTP_PASS is ${pass.length} characters; a Google App Password is 16. ` +
+        `If you copied your normal Gmail password, that will always fail.`,
+    );
+  }
+
   return nodemailer.createTransport({
     host,
     port,
