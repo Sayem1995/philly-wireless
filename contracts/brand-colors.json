@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "Default theme palette - the SINGLE SOURCE OF TRUTH for brand colours.",
+    "These are Philly Phone Repair's values. A deployment overrides them with",
+    "BRAND_* environment variables; see .env.prime.example.",
+    "",
+    "Loaded by tailwind.config.js (Node `require`) and vite.config.ts (JSON",
+    "import). The same defaults are mirrored as a TypeScript constant in",
+    "contracts/brand.ts, because that module is also bundled for the BROWSER,",
+    "where both ways of reading this file fail: `createRequire` is a Node",
+    "builtin that Vite externalizes, and a `.cjs` module is evaluated by Vite's",
+    "SSR loader with no `module` binding. api/brand-colors.test.ts asserts the",
+    "two copies stay identical, so drift cannot go unnoticed."
+  ],
+  "primary": {
+    "DEFAULT": "#7F1D1D",
+    "dark": "#5C1515",
+    "light": "#9B2C2C"
+  },
+  "secondary": {
+    "DEFAULT": "#F3D5D8",
+    "dark": "#E8B8BE",
+    "light": "#FAE9EB"
+  },
+  "surface": "#FFFDF7",
+  "ink": "#2B1A18",
+  "accent": "#7F1D1D"
+}

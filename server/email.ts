@@ -1,5 +1,33 @@
 import nodemailer from "nodemailer";
-import { STORE } from "../contracts/constants.js";
+import { STORE, BRAND } from "../contracts/constants.js";
+import { longHours } from "../contracts/brand.js";
+
+/**
+ * Brand palette for inline email styles.
+ *
+ * Email clients do not support CSS custom properties, so the theme colours have
+ * to be interpolated as literal hex values here. They come from the same
+ * `BRAND_*` environment variables that drive the website, which keeps a
+ * store's emails and its site in step.
+ */
+const C = {
+  primary: BRAND.colors.primary.DEFAULT,
+  primaryDark: BRAND.colors.primary.dark,
+  secondary: BRAND.colors.secondary.DEFAULT,
+  surface: BRAND.colors.surface,
+  ink: BRAND.colors.ink,
+  muted: "#8a7168",
+} as const;
+
+/** `"Philly Phone Repair"` → `Philly <span style="color:…">Phone Repair</span>`.
+ *  When a store name is a single word the whole name is coloured instead. */
+function wordmark(): string {
+  const { wordmarkPrimary, wordmarkAccent } = BRAND;
+  if (!wordmarkAccent) {
+    return `<span style="color:${C.primary};">${wordmarkPrimary}</span>`;
+  }
+  return `${wordmarkPrimary} <span style="color:${C.primary};">${wordmarkAccent}</span>`;
+}
 
 /**
  * Email sender.
@@ -120,24 +148,24 @@ export async function sendEmail(opts: {
 
 /* ---------- templates ---------- */
 function shell(title: string, body: string) {
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#FFFDF7;font-family:Georgia,serif;">
+  return `<!doctype html><html><body style="margin:0;padding:0;background:${C.surface};font-family:Georgia,serif;">
   <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
-    <div style="text-align:center;padding-bottom:24px;border-bottom:2px solid #F3D5D8;">
-      <p style="font-size:22px;color:#2B1A18;margin:0;">Philly <span style="color:#7F1D1D;">Phone Repair</span></p>
-      <p style="font-size:10px;letter-spacing:3px;color:#7F1D1D;margin:6px 0 0;">CENTER CITY · PHILADELPHIA</p>
+    <div style="text-align:center;padding-bottom:24px;border-bottom:2px solid ${C.secondary};">
+      <p style="font-size:22px;color:${C.ink};margin:0;">${wordmark()}</p>
+      <p style="font-size:10px;letter-spacing:3px;color:${C.primary};margin:6px 0 0;">${BRAND.tagline.toUpperCase()}</p>
     </div>
-    <h1 style="font-size:24px;color:#2B1A18;text-align:center;margin:28px 0 8px;">${title}</h1>
+    <h1 style="font-size:24px;color:${C.ink};text-align:center;margin:28px 0 8px;">${title}</h1>
     ${body}
-    <div style="margin-top:32px;padding-top:20px;border-top:2px solid #F3D5D8;text-align:center;font-size:12px;color:#8a7168;">
+    <div style="margin-top:32px;padding-top:20px;border-top:2px solid ${C.secondary};text-align:center;font-size:12px;color:${C.muted};">
       <p style="margin:4px 0;">${STORE.address}, ${STORE.city}</p>
       <p style="margin:4px 0;">${STORE.phone} · ${STORE.email}</p>
-      <p style="margin:4px 0;">Mon–Fri 9–7 · Sat 10–6 · Sun 12–5</p>
+      <p style="margin:4px 0;">${longHours(BRAND.hours)}</p>
     </div>
   </div></body></html>`;
 }
 
 function row(k: string, v: string) {
-  return `<tr><td style="padding:8px 0;color:#8a7168;font-size:14px;">${k}</td><td style="padding:8px 0;text-align:right;font-size:14px;color:#2B1A18;font-weight:bold;">${v}</td></tr>`;
+  return `<tr><td style="padding:8px 0;color:${C.muted};font-size:14px;">${k}</td><td style="padding:8px 0;text-align:right;font-size:14px;color:${C.ink};font-weight:bold;">${v}</td></tr>`;
 }
 
 export function bookingConfirmationHtml(b: {
@@ -149,8 +177,8 @@ export function bookingConfirmationHtml(b: {
   });
   return shell(
     "Your repair is booked!",
-    `<p style="text-align:center;color:#8a7168;font-size:14px;margin:0 0 24px;">Hi ${b.customerName.split(" ")[0]}, we're expecting you. Here's your visit summary:</p>
-    <div style="background:#fff;border:1px solid #F3D5D8;border-radius:16px;padding:24px;">
+    `<p style="text-align:center;color:${C.muted};font-size:14px;margin:0 0 24px;">Hi ${b.customerName.split(" ")[0]}, we're expecting you. Here's your visit summary:</p>
+    <div style="background:#fff;border:1px solid ${C.secondary};border-radius:16px;padding:24px;">
       <table style="width:100%;border-collapse:collapse;">
         ${row("Confirmation", `#PPR-${b.id}`)}
         ${row("Device", b.device)}
@@ -159,7 +187,7 @@ export function bookingConfirmationHtml(b: {
         ${row("Check-in time", b.timeSlot)}
       </table>
     </div>
-    <p style="color:#8a7168;font-size:13px;line-height:1.7;margin:24px 0 0;">
+    <p style="color:${C.muted};font-size:13px;line-height:1.7;margin:24px 0 0;">
       Diagnostics are always free, and we'll confirm the final quote with you before any work begins.
       Need to reschedule? Just call ${STORE.phone} or reply to this email.
     </p>`,
@@ -172,7 +200,7 @@ export function staffNotificationHtml(b: {
 }) {
   return shell(
     `New booking — #PPR-${b.id}`,
-    `<div style="background:#fff;border:1px solid #F3D5D8;border-radius:16px;padding:24px;">
+    `<div style="background:#fff;border:1px solid ${C.secondary};border-radius:16px;padding:24px;">
       <table style="width:100%;border-collapse:collapse;">
         ${row("Customer", b.customerName)}
         ${row("Phone", b.phone)}
@@ -206,8 +234,8 @@ export function escapeHtml(s: string): string {
 /** Wrap a free-text message (from the admin panel) in the branded shell. */
 export function messageHtml(body: string): string {
   return shell(
-    "A message from Philly Phone Repair",
-    `<div style="background:#fff;border:1px solid #F3D5D8;border-radius:16px;padding:24px;color:#2B1A18;font-size:15px;line-height:1.7;white-space:pre-wrap;">${escapeHtml(body)}</div>`,
+    `A message from ${BRAND.name}`,
+    `<div style="background:#fff;border:1px solid ${C.secondary};border-radius:16px;padding:24px;color:${C.ink};font-size:15px;line-height:1.7;white-space:pre-wrap;">${escapeHtml(body)}</div>`,
   );
 }
 
@@ -232,10 +260,10 @@ export function receiptHtml(r: {
 
   return shell(
     "Payment receipt",
-    `<p style="text-align:center;color:#8a7168;font-size:14px;margin:0 0 20px;">
+    `<p style="text-align:center;color:${C.muted};font-size:14px;margin:0 0 20px;">
       Hi ${r.customerName.split(" ")[0]}, thank you — here is your receipt for the repair of your ${r.device}.
     </p>
-    <div style="background:#fff;border:1px solid #F3D5D8;border-radius:16px;padding:24px;">
+    <div style="background:#fff;border:1px solid ${C.secondary};border-radius:16px;padding:24px;">
       <table style="width:100%;border-collapse:collapse;">
         ${row("Receipt", `#PPR-R${r.id}`)}
         ${row("Date paid", r.paidAt)}
@@ -243,22 +271,22 @@ export function receiptHtml(r: {
         ${row("Repair", r.repairType)}
         ${row("Payment method", r.paymentMethod)}
       </table>
-      <div style="border-top:1px solid #F3D5D8;margin:18px 0;"></div>
+      <div style="border-top:1px solid ${C.secondary};margin:18px 0;"></div>
       <table style="width:100%;border-collapse:collapse;">
         ${rows}
         ${taxRow}
       </table>
-      <div style="border-top:2px solid #F3D5D8;margin:18px 0;"></div>
+      <div style="border-top:2px solid ${C.secondary};margin:18px 0;"></div>
       <table style="width:100%;border-collapse:collapse;">
         <tr>
-          <td style="font-size:16px;color:#2B1A18;font-weight:bold;">Total paid</td>
-          <td style="text-align:right;font-size:20px;color:#7F1D1D;font-weight:bold;">${money(r.totalCents)}</td>
+          <td style="font-size:16px;color:${C.ink};font-weight:bold;">Total paid</td>
+          <td style="text-align:right;font-size:20px;color:${C.primary};font-weight:bold;">${money(r.totalCents)}</td>
         </tr>
       </table>
     </div>
-    ${r.notes ? `<p style="color:#8a7168;font-size:13px;margin:16px 0 0;">${r.notes}</p>` : ""}
-    ${r.url ? `<p style="text-align:center;margin:22px 0 0;"><a href="${r.url}" style="background:#7F1D1D;color:#FFFDF7;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">View or print this receipt</a></p>` : ""}
-    <p style="color:#8a7168;font-size:12px;line-height:1.7;margin:22px 0 0;text-align:center;">
+    ${r.notes ? `<p style="color:${C.muted};font-size:13px;margin:16px 0 0;">${r.notes}</p>` : ""}
+    ${r.url ? `<p style="text-align:center;margin:22px 0 0;"><a href="${r.url}" style="background:${C.primary};color:${C.surface};text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">View or print this receipt</a></p>` : ""}
+    <p style="color:${C.muted};font-size:12px;line-height:1.7;margin:22px 0 0;text-align:center;">
       Keep this for your records — it also covers any warranty claim.
     </p>`,
   );

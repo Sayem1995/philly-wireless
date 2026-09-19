@@ -73,11 +73,32 @@
     @apply bg-background text-foreground;
   }
 }
-/* ---- Philly Phone Repair theme ---- */
+/* ---- Brand theme ----
+ *
+ * The `@brand-…` tokens below are replaced at build time by the `brandTheme()`
+ * plugin in `vite.config.ts`, which reads them from the environment
+ * (`BRAND_*` / `VITE_BRAND_*`) with the Philly Phone Repair palette as the
+ * default. Values are space-separated RGB channels so Tailwind's
+ * `rgb(var(--brand-primary) / <alpha-value>)` mappings keep working — that is
+ * what makes opacity modifiers such as `bg-burgundy/40` and `text-ink/55`
+ * behave correctly.
+ */
+:root {
+  --brand-primary: @brand-primary;
+  --brand-primary-dark: @brand-primary-dark;
+  --brand-primary-light: @brand-primary-light;
+  --brand-secondary: @brand-secondary;
+  --brand-secondary-dark: @brand-secondary-dark;
+  --brand-secondary-light: @brand-secondary-light;
+  --brand-surface: @brand-surface;
+  --brand-ink: @brand-ink;
+  --brand-accent: @brand-accent;
+}
+
 html { scroll-behavior: smooth; }
-body { background: #FFFDF7; }
-::selection { background: #F3D5D8; color: #7F1D1D; }
+body { background: rgb(var(--brand-surface)); }
+::selection { background: rgb(var(--brand-secondary)); color: rgb(var(--brand-primary)); }
 ::-webkit-scrollbar { width: 9px; }
-::-webkit-scrollbar-track { background: #FFFDF7; }
-::-webkit-scrollbar-thumb { background: #E8B8BE; border-radius: 8px; }
-::-webkit-scrollbar-thumb:hover { background: #7F1D1D; }
+::-webkit-scrollbar-track { background: rgb(var(--brand-surface)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--brand-secondary-dark)); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--brand-primary)); }

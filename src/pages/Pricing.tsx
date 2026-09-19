@@ -51,7 +51,7 @@ export default function Pricing() {
 
   return (
     <>
-      <Seo title="Repair Pricing — Philly Phone Repair" description="Transparent repair pricing for iPhone, Samsung, Pixel, Motorola, OnePlus, iPad, tablets, laptops, MacBooks and consoles in Philadelphia." />
+      <Seo title="Repair Pricing" description="Transparent repair pricing for iPhone, Samsung, Pixel, Motorola, OnePlus, iPad, tablets, laptops, MacBooks and consoles in Philadelphia." />
       <section className="pt-36 pb-14 bg-gradient-to-b from-blush-light to-ivory text-center">
         <Reveal className="max-w-2xl mx-auto px-5">
           <p className="text-xs tracking-[0.35em] uppercase text-burgundy font-semibold mb-4">Transparent Pricing</p>

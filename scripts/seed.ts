@@ -1,9 +1,11 @@
 import "dotenv/config";
 import { getDb, Timestamp } from "../server/queries/firestore.js";
 import { nextId } from "../server/queries/ids.js";
+import { STORE } from "../contracts/constants.js";
 
 /**
- * Seeds Firestore with the initial catalog for Philly Phone Repair.
+ * Seeds Firestore with the initial catalog for the configured storefront
+ * (see `BRAND_NAME`; defaults to Philly Phone Repair).
  * Run with: npm run db:seed
  *
  * Requires FIRESTORE_EMULATOR_HOST (local) or real credentials for the target
@@ -179,7 +181,7 @@ async function seed() {
     await db.collection("blogPosts").doc(String(id)).set({ id, ...p, publishedAt: Timestamp.now() });
   }
 
-  console.log("Done. Firestore seeded.");
+  console.log(`Done. Firestore seeded for ${STORE.name}.`);
   process.exit(0);
 }
 

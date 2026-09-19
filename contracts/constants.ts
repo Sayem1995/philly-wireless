@@ -1,3 +1,5 @@
+import { readBrand } from "./brand.js";
+
 export const ErrorMessages = {
   unauthenticated: "Authentication required",
   insufficientRole: "Insufficient permissions",
@@ -9,19 +11,32 @@ export const Paths = {
 } as const;
 
 /* ================= BUSINESS CONSTANTS ================= */
+
+/**
+ * Store identity now lives in `contracts/brand.ts` and is resolved from the
+ * environment, so one repo can serve several storefronts. `BRAND` is the
+ * canonical export; `STORE` is kept as an alias because it is referenced
+ * throughout the server (emails, SMS, receipts) and renaming every call site
+ * would create churn for no benefit.
+ */
+export const BRAND = readBrand();
+
 export const STORE = {
-  name: "Philly Phone Repair",
-  address: "1033 Chestnut Street",
-  city: "Philadelphia, PA 19107",
-  phone: "(215) 555-0123",
-  phoneHref: "tel:+12155550123",
-  email: "hello@phillyphonerepair.com",
-  hours: [
-    { d: "Monday – Friday", h: "9:00 AM – 7:00 PM" },
-    { d: "Saturday", h: "10:00 AM – 6:00 PM" },
-    { d: "Sunday", h: "12:00 PM – 5:00 PM" },
-  ],
+  name: BRAND.name,
+  address: BRAND.address,
+  city: BRAND.city,
+  phone: BRAND.phone,
+  phoneHref: BRAND.phoneHref,
+  email: BRAND.email,
+  hours: BRAND.hours.map(({ d, h }) => ({ d, h })),
 } as const;
+
+export const STORE_HOURS = BRAND.hours;
+export const BRAND_COLORS = BRAND.colors;
+export const BRAND_TAGLINE = BRAND.tagline;
+export const BRAND_DESCRIPTION = BRAND.description;
+export const BRAND_LOGO = BRAND.logo;
+export const BRAND_SITE_URL = BRAND.siteUrl;
 
 export const BOOKING_DEVICES = [
   "iPhone",

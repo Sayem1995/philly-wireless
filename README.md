@@ -32,6 +32,76 @@ npm run dev               # http://localhost:3000
 The app **boots without Firebase credentials** so the marketing pages render;
 only Firestore/Auth-backed routes fail until they are configured.
 
+## One repo, several storefronts
+
+This codebase serves more than one shop. **Philly Phone Repair is the built-in
+default**, so the original deployment keeps working with no new variables set;
+a second store is a second Vercel project built from the same repo with brand
+variables supplied. There is no fork and no duplicated code, so a bug fix lands
+on both stores at once.
+
+Everything store-specific — name, wordmark, tagline, address, phone, email,
+WhatsApp, opening hours, domain, logo and the whole colour palette — is resolved
+from the environment in **`contracts/brand.ts`**, which is the single source of
+truth. It is read by:
+
+| Consumer | How it gets the value |
+| --- | --- |
+| React pages | `import { BRAND, STORE } from "@contracts/constants"` |
+| `<head>` title / description / canonical / JSON-LD | the `brand()` plugin in `vite.config.ts` rewrites `__BRAND_*__` tokens in `index.html` at build time |
+| Site palette | the same plugin replaces `@brand-*` tokens in `src/index.css`; `tailwind.config.js` maps them to `rgb(var(--brand-x) / <alpha-value>)` |
+| Email + SMS templates | `BRAND` and `STORE` on the server (email clients cannot use CSS variables, so the palette is interpolated as literal hex) |
+
+Page components deliberately keep using the existing Tailwind class names
+(`burgundy`, `blush`, `ivory`, `ink`) — only their *values* became configurable,
+so no page markup had to change.
+
+Because Vite only exposes `VITE_`-prefixed variables to the browser, each brand
+value has two accepted spellings. `readBrand()` prefers the server-side one:
+
+| Browser (`VITE_`) | Server |
+| --- | --- |
+| `VITE_BRAND_NAME` | `BRAND_NAME` |
+| `VITE_BRAND_PHONE` | `BRAND_PHONE` |
+| `VITE_BRAND_HOURS` | `BRAND_HOURS` |
+| … | … |
+
+### Opening hours
+
+`BRAND_HOURS` uses an explicit, unambiguous format — one row per `;`, days and
+times separated by `|`, day ranges separated by `,`:
+
+```
+BRAND_HOURS=Monday-Saturday|10 AM-10 PM;Sunday|11 AM-9 PM
+```
+
+This feeds the footer summary, the contact page and the schema.org
+`openingHours`, so opening times stay consistent everywhere. An unparseable
+value fails the build loudly rather than silently showing the wrong hours.
+
+### Standing up a second store
+
+1. **Create another Vercel project** from this same GitHub repo, and point the
+   new domain at it.
+2. **Create a separate Firebase project** for it (Firestore + Email/Password
+   auth). Do not reuse the first store's project — that is what keeps bookings,
+   customers, inventory and staff accounts separate.
+3. **Copy `.env.prime.example`** as your template, replace the values, and paste
+   them into the new Vercel project's Environment Variables (Production and
+   Preview). That file is fully commented and covers both stores' requirements.
+4. **Deploy the rules and seed the catalog**:
+   ```bash
+   # point .firebaserc at the new project id first
+   npm run deploy:rules
+   npm run db:seed
+   ```
+5. **Deploy.** The same commit now renders two differently-branded sites against
+   two different databases.
+
+> ⚠️ On a fresh Firebase project, set `FIREBASE_ADMIN_UID` to the UID that
+> should become the store's admin, or promote that user's `role` to `"admin"` in
+> the `users` collection. Otherwise nobody can open the admin panel.
+
 ### Environment variables
 
 Frontend values are exposed to the browser by Vite and must be prefixed `VITE_`.

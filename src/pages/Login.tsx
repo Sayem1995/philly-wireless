@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { auth, isFirebaseConfigured } from "@/lib/firebase";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { BRAND, STORE } from "@contracts/constants";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -82,7 +83,7 @@ export default function Login() {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle>Welcome</CardTitle>
-          <CardDescription>Staff sign in for the Philly Phone Repair admin</CardDescription>
+          <CardDescription>Staff sign in for the {BRAND.name} admin</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <form className="space-y-3" onSubmit={handleEmailLogin}>
@@ -95,7 +96,7 @@ export default function Login() {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@phillyphonerepair.com"
+                placeholder={`you@${STORE.email.split("@")[1] ?? "example.com"}`}
               />
             </div>
             <div className="space-y-1.5">

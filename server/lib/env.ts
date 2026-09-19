@@ -42,6 +42,12 @@ export const env = {
   gcpServiceAccountEmail: optional("GCP_SERVICE_ACCOUNT_EMAIL"),
 
   // ── Public site URL (for links in emails, e.g. customer receipts) ──
-  // Override in Vercel when the domain changes.
-  publicSiteUrl: optional("PUBLIC_SITE_URL") || "https://philly-wireless.vercel.app",
+  // Override in Vercel when the domain changes. Falls back to BRAND_SITE_URL
+  // so a second storefront gets its own domain in outgoing links without
+  // needing an extra variable.
+  publicSiteUrl:
+    optional("PUBLIC_SITE_URL") ||
+    optional("BRAND_SITE_URL") ||
+    optional("VITE_BRAND_SITE_URL") ||
+    "https://philly-wireless.vercel.app",
 };
