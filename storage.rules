@@ -1,0 +1,43 @@
+rules_version = '2';
+
+// Cloud Storage for Firebase — product images.
+//
+// Scope is deliberately narrow: this bucket holds nothing but product photos,
+// which are shown to anonymous visitors on /devices and /accessories.
+//
+//   read   — public, because the product cards render straight from the
+//            canonical download URL with no auth token.
+//   write  — any signed-in Firebase Auth user, subject to a size and image
+//            content-type cap.
+//
+// WHY NOT "admin only": the app's admin role lives in the Firestore `users`
+// document and is enforced server-side by tRPC (`adminQuery`), and Firestore
+// rules deny all client reads of that collection. Storage rules cannot consult
+// Firestore, and the ID token carries no admin claim, so "signed in" is the
+// strongest condition expressible here. That is acceptable because Firebase
+// Auth for this project has no public sign-up — the only accounts are the ones
+// created by hand in the Firebase console — and because the worst case for a
+// rogue signed-in write is an orphaned image object, never a product row: the
+// `products` collection is written exclusively by `/api/trpc`. Locking this
+// down further would mean minting a custom `admin` claim at sign-in and
+// redeploying the API.
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Keep in sync with MAX_PRODUCT_IMAGE_BYTES in src/lib/productImages.ts.
+    function isAcceptableImage() {
+      return request.resource.size <= 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /products/{imageId} {
+      allow read: if true;
+      allow create, update: if request.auth != null && isAcceptableImage();
+      allow delete: if request.auth != null;
+    }
+
+    // Anything outside products/ is not part of the app's data model.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

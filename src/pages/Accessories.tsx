@@ -3,11 +3,14 @@ import Seo from "@/components/Seo";
 import Reveal from "@/components/Reveal";
 import { ShoppingBag } from "lucide-react";
 import { STORE } from "@contracts/constants";
+import { productImageUrl } from "@/lib/productImages";
+import { activeStorageBucket } from "@/lib/firebase";
 
 const money = (c: number) => "$" + (c / 100).toFixed(2);
 
 export default function Accessories() {
   const { data, isLoading } = trpc.shop.products.useQuery({ kind: "accessory" });
+  const bucket = activeStorageBucket();
   return (
     <>
       <Seo title="Accessories — Cases, Chargers, Cables & More | Philly Phone Repair" description="Phone cases, chargers, MagSafe, power banks, iPad cases, laptop & MacBook chargers, gaming controllers and headphones in Center City Philadelphia." />
@@ -23,21 +26,34 @@ export default function Accessories() {
           <p className="text-center text-ink/40 py-16">Loading accessories…</p>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {(data ?? []).map((p, i) => (
+            {(data ?? []).map((p, i) => {
+              const imageUrl = productImageUrl(p, bucket);
+              return (
               <Reveal key={p.id} delay={(i % 4) * 0.06}>
-                <div className="group bg-white rounded-3xl border border-blush p-7 h-full flex flex-col hover:-translate-y-2 hover:shadow-xl hover:shadow-burgundy/10 transition-all duration-500">
-                  <div className="w-12 h-12 rounded-2xl bg-blush grid place-items-center mb-5 group-hover:bg-burgundy transition-colors duration-500">
-                    <ShoppingBag size={20} className="text-burgundy group-hover:text-ivory transition-colors duration-500" />
-                  </div>
-                  <h2 className="font-serif text-lg text-ink">{p.name}</h2>
-                  <p className="text-[13px] text-ink/50 mt-2 leading-relaxed flex-1">{p.description}</p>
-                  <div className="mt-5 flex items-center justify-between">
-                    <span className="font-serif text-xl text-burgundy">{money(p.price)}</span>
-                    <span className={`text-[12px] ${p.stock > 0 ? "text-emerald-700" : "text-burgundy"}`}>{p.stock > 0 ? "In stock" : "Sold out"}</span>
+                <div className="group bg-white rounded-3xl border border-blush overflow-hidden h-full flex flex-col hover:-translate-y-2 hover:shadow-xl hover:shadow-burgundy/10 transition-all duration-500">
+                  {/* Product image when the admin uploaded one; icon otherwise. */}
+                  {imageUrl && (
+                    <div className="aspect-[4/3] bg-blush-light overflow-hidden">
+                      <img src={imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    </div>
+                  )}
+                  <div className="p-7 flex-1 flex flex-col">
+                    {!imageUrl && (
+                      <div className="w-12 h-12 rounded-2xl bg-blush grid place-items-center mb-5 group-hover:bg-burgundy transition-colors duration-500">
+                        <ShoppingBag size={20} className="text-burgundy group-hover:text-ivory transition-colors duration-500" />
+                      </div>
+                    )}
+                    <h2 className="font-serif text-lg text-ink">{p.name}</h2>
+                    <p className="text-[13px] text-ink/50 mt-2 leading-relaxed flex-1">{p.description}</p>
+                    <div className="mt-5 flex items-center justify-between">
+                      <span className="font-serif text-xl text-burgundy">{money(p.price)}</span>
+                      <span className={`text-[12px] ${p.stock > 0 ? "text-emerald-700" : "text-burgundy"}`}>{p.stock > 0 ? "In stock" : "Sold out"}</span>
+                    </div>
                   </div>
                 </div>
               </Reveal>
-            ))}
+              );
+            })}
           </div>
         )}
         <Reveal className="text-center mt-14">

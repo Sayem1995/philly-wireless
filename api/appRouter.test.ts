@@ -29,6 +29,8 @@ vi.mock("../server/queries/store.js", () => ({
     updatePrice: vi.fn(),
     createPrice: vi.fn(),
     deletePrice: vi.fn(),
+    // products
+    upsertProduct: vi.fn(),
     // receipts
     receipts: vi.fn(),
     createReceipt: vi.fn(),
@@ -362,6 +364,68 @@ describe("admin price management", () => {
   it("blocks non-admins from deleting prices", async () => {
     await expect(caller(regularUser).admin.deletePrice({ id: 42 })).rejects.toThrow(/permissions/i);
     expect(mockedStore.deletePrice).not.toHaveBeenCalled();
+  });
+});
+
+describe("admin product image handling", () => {
+  const product = {
+    name: "iPhone 15 Pro",
+    kind: "device_new" as const,
+    subcategory: "iPhone",
+    price: 109900,
+    stock: 3,
+    description: "Brand new, sealed",
+    badge: "Best Seller",
+    active: true,
+  };
+
+  it("forwards the uploaded Storage object path and bucket to the store", async () => {
+    mockedStore.upsertProduct.mockResolvedValue(undefined);
+
+    await caller(adminUser).admin.upsertProduct({
+      ...product,
+      imagePath: "products/iphone-15-pro-1700000000000-ab12cd.webp",
+      imageBucket: "philly-repair.firebasestorage.app",
+    });
+
+    expect(mockedStore.upsertProduct).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imagePath: "products/iphone-15-pro-1700000000000-ab12cd.webp",
+        imageBucket: "philly-repair.firebasestorage.app",
+      }),
+    );
+  });
+
+  it("defaults both image fields to null when the client omits them", async () => {
+    mockedStore.upsertProduct.mockResolvedValue(undefined);
+
+    await caller(adminUser).admin.upsertProduct(product);
+
+    expect(mockedStore.upsertProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ imagePath: null, imageBucket: null }),
+    );
+  });
+
+  it("accepts an explicit null so an image can be removed", async () => {
+    mockedStore.upsertProduct.mockResolvedValue(undefined);
+
+    await caller(adminUser).admin.upsertProduct({
+      ...product,
+      id: 7,
+      imagePath: null,
+      imageBucket: null,
+    });
+
+    expect(mockedStore.upsertProduct).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 7, imagePath: null, imageBucket: null }),
+    );
+  });
+
+  it("blocks non-admins from attaching an image", async () => {
+    await expect(
+      caller(regularUser).admin.upsertProduct({ ...product, imagePath: "products/x.webp" }),
+    ).rejects.toThrow(/permissions/i);
+    expect(mockedStore.upsertProduct).not.toHaveBeenCalled();
   });
 });
 

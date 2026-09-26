@@ -434,6 +434,12 @@ export const adminRouter = createRouter({
         stock: z.number().min(0),
         description: z.string().optional(),
         badge: z.string().optional(),
+        // Storage object path, written by the admin UI after a direct-to-bucket
+        // upload. `null` explicitly clears an existing image.
+        imagePath: z.string().max(512).nullable().optional(),
+        // Bucket that path lives in, so the public site never depends on the
+        // deployment having VITE_FIREBASE_STORAGE_BUCKET set correctly.
+        imageBucket: z.string().max(256).nullable().optional(),
         active: z.boolean().optional(),
       }),
     )
@@ -447,6 +453,8 @@ export const adminRouter = createRouter({
         stock: input.stock,
         description: input.description ?? null,
         badge: input.badge ?? null,
+        imagePath: input.imagePath ?? null,
+        imageBucket: input.imageBucket ?? null,
         active: input.active ?? true,
       });
       return { ok: true };

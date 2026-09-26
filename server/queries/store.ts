@@ -90,6 +90,19 @@ export type ProductRow = {
   stock: number;
   description: string | null;
   badge: string | null;
+  /**
+   * Firebase Storage object path (e.g. `products/iphone-15-….webp`), NOT a full
+   * URL. Storing the path keeps rows portable across bucket renames — the
+   * download URL is derived at render time by `canonicalImageUrl()`.
+   */
+  imagePath: string | null;
+  /**
+   * Bucket the image was uploaded to. Recorded per-product so the public site
+   * can build a correct URL even when `VITE_FIREBASE_STORAGE_BUCKET` is unset
+   * and the upload had to fall back to a guessed bucket name. `null` falls back
+   * to the client's configured bucket at render time.
+   */
+  imageBucket: string | null;
   active: boolean;
   createdAt: Date;
 };
@@ -220,6 +233,8 @@ function mapProduct(r: Row): ProductRow {
     stock: Number(r.stock ?? 0),
     description: r.description == null ? null : String(r.description),
     badge: r.badge == null ? null : String(r.badge),
+    imagePath: r.imagePath == null || r.imagePath === "" ? null : String(r.imagePath),
+    imageBucket: r.imageBucket == null || r.imageBucket === "" ? null : String(r.imageBucket),
     active: Boolean(r.active ?? true),
     createdAt: toDate(r.createdAt) ?? new Date(),
   };
