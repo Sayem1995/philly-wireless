@@ -118,6 +118,21 @@ export default function Products() {
 
   const previewUrl = productImageUrl(form);
 
+  const saveProduct = () => {
+    // Say which field is missing rather than appearing to do nothing.
+    if (!form) return;
+    if (!form.name.trim()) {
+      setSaveError("Enter a product name.");
+      return;
+    }
+    if (!form.subcategory.trim()) {
+      setSaveError("Enter a category — it becomes a filter tab on the site.");
+      return;
+    }
+    setSaveError(null);
+    upsert.mutate(form);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -230,13 +245,7 @@ export default function Products() {
             )}
             <button
               disabled={upsert.isPending || uploading}
-              onClick={() => {
-                // Say which field is missing rather than appearing to do nothing.
-                if (!form.name.trim()) return setSaveError("Enter a product name.");
-                if (!form.subcategory.trim()) return setSaveError("Enter a category — it becomes a filter tab on the site.");
-                setSaveError(null);
-                upsert.mutate(form);
-              }}
+              onClick={saveProduct}
               className="w-full bg-burgundy text-ivory font-semibold py-3 rounded-full hover:bg-burgundy-dark disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {upsert.isPending ? "Saving…" : uploading ? "Uploading image…" : "Save"}
