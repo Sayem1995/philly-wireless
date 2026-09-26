@@ -5,7 +5,6 @@ import Reveal from "@/components/Reveal";
 import { Smartphone, Tablet, BadgeCheck } from "lucide-react";
 import { STORE } from "@contracts/constants";
 import { productImageUrl } from "@/lib/productImages";
-import { activeStorageBucket } from "@/lib/firebase";
 
 const money = (c: number) => "$" + (c / 100).toFixed(c % 100 ? 2 : 0);
 
@@ -27,8 +26,6 @@ export default function Devices() {
   // the same render instead of showing an empty grid first.
   const activeSub = subs.includes(sub) ? sub : "All";
   const rows = (data ?? []).filter((p) => activeSub === "All" || p.subcategory === activeSub);
-
-  const bucket = activeStorageBucket();
 
   return (
     <>
@@ -60,7 +57,7 @@ export default function Devices() {
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {rows.map((p, i) => {
-              const imageUrl = productImageUrl(p, bucket);
+              const imageUrl = productImageUrl(p);
               return (
               <Reveal key={p.id} delay={(i % 3) * 0.07}>
                 <div className="group bg-white rounded-3xl border border-blush overflow-hidden hover:-translate-y-2 hover:shadow-xl hover:shadow-burgundy/10 transition-all duration-500">

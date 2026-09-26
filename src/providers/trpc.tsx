@@ -37,6 +37,15 @@ const trpcClient = trpc.createClient({
   ],
 });
 
+/**
+ * The vanilla client, for non-React callers.
+ *
+ * `firebase.ts` cannot host such callers: it is imported *by* this module for
+ * the auth token, so importing the client there would be a cycle. Feature
+ * modules that need to call a procedure outside a component use this export.
+ */
+export const vanillaTrpcClient = trpcClient;
+
 export function TRPCProvider({ children }: { children: ReactNode }) {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>

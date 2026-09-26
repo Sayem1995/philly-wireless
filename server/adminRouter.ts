@@ -1,10 +1,13 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery } from "./middleware.js";
 import { store } from "./queries/store.js";
+import { createProductImage } from "./queries/productImages.js";
 import { sendEmail, receiptHtml, messageHtml } from "./email.js";
 import { sendSms } from "./sms.js";
 import { env } from "./lib/env.js";
 import { STORE } from "../contracts/constants.js";
+import { IMAGE_MAX_DATA_CHARS, normalizeImageMime } from "../contracts/productImages.js";
 import {
   notifyCustomer,
   type CustomerNotificationKind,
@@ -434,12 +437,9 @@ export const adminRouter = createRouter({
         stock: z.number().min(0),
         description: z.string().optional(),
         badge: z.string().optional(),
-        // Storage object path, written by the admin UI after a direct-to-bucket
-        // upload. `null` explicitly clears an existing image.
-        imagePath: z.string().max(512).nullable().optional(),
-        // Bucket that path lives in, so the public site never depends on the
-        // deployment having VITE_FIREBASE_STORAGE_BUCKET set correctly.
-        imageBucket: z.string().max(256).nullable().optional(),
+        // Id of a `productImages` document, as returned by `admin.uploadImage`.
+        // `null` explicitly clears the product's image.
+        imagePath: z.string().max(64).nullable().optional(),
         active: z.boolean().optional(),
       }),
     )
@@ -454,10 +454,44 @@ export const adminRouter = createRouter({
         description: input.description ?? null,
         badge: input.badge ?? null,
         imagePath: input.imagePath ?? null,
-        imageBucket: input.imageBucket ?? null,
         active: input.active ?? true,
       });
       return { ok: true };
+    }),
+
+  /**
+   * Store an uploaded product image and return the id to save on the product.
+   *
+   * The browser re-encodes and downscales before calling this, so `data` is
+   * normally well under the ceiling. The limits are re-checked here because a
+   * client can be bypassed, and a document over Firestore's 1 MiB cap would
+   * fail deep inside the driver with an opaque error.
+   */
+  uploadImage: adminQuery
+    .input(
+      z.object({
+        data: z
+          .string()
+          .min(1)
+          .max(IMAGE_MAX_DATA_CHARS, "That image is too large to store.")
+          // base64 only — reject anything that would corrupt the data URL.
+          .regex(/^[A-Za-z0-9+/]+={0,2}$/, "Image data was not valid base64."),
+        contentType: z.string().min(1).max(100),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const contentType = normalizeImageMime(input.contentType);
+      if (!contentType) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Unsupported image type “${input.contentType}”.`,
+        });
+      }
+
+      // 4 base64 chars encode 3 bytes.
+      const bytes = Math.floor((input.data.length * 3) / 4);
+      const image = await createProductImage({ data: input.data, contentType, bytes });
+      return { id: image.id, bytes: image.bytes };
     }),
 
   deleteProduct: adminQuery

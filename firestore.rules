@@ -10,6 +10,16 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+    // Product images, stored as base64 because Cloud Storage requires the Blaze
+    // plan and this project is on the free Spark plan. Deliberately NOT
+    // client-readable: the whole catalogue could otherwise be downloaded in one
+    // sweep, and every read would count against the daily quota. Browsers get
+    // images from `GET /api/images/:id` — a cached HTTP response from the
+    // server, not a Firestore read. Writes go through `admin.uploadImage` using
+    // the Admin SDK, which bypasses these rules entirely.
+    match /productImages/{id} {
+      allow read, write: if false;
+    }
     match /blogPosts/{id} {
       allow read: if true;
       allow write: if false;

@@ -5,14 +5,14 @@ import { Plus, Pencil, Trash2, ImagePlus, Loader2, X } from "lucide-react";
 import {
   ACCEPTED_PRODUCT_IMAGE_TYPES,
   MAX_PRODUCT_IMAGE_BYTES,
+  formatBytes,
   productImageUrl,
   validateProductImageFile,
 } from "@/lib/productImages";
 import {
   ProductImageUploadError,
-  activeStorageBucket,
   uploadProductImage,
-} from "@/lib/firebase";
+} from "@/lib/productImageUpload";
 
 type PForm = {
   id?: number;
@@ -23,11 +23,11 @@ type PForm = {
   stock: number;
   description: string;
   badge: string;
+  /** Id of a `productImages` document; the URL is derived from it. */
   imagePath: string | null;
-  imageBucket: string | null;
   active: boolean;
 };
-const empty: PForm = { name: "", kind: "accessory", subcategory: "", price: 0, stock: 0, description: "", badge: "", imagePath: null, imageBucket: null, active: true };
+const empty: PForm = { name: "", kind: "accessory", subcategory: "", price: 0, stock: 0, description: "", badge: "", imagePath: null, active: true };
 
 export default function Products() {
   const utils = trpc.useUtils();
@@ -69,9 +69,9 @@ export default function Products() {
     setPreviewFailed(false);
     setUploading(true);
     try {
-      const { path, bucket: uploadedTo } = await uploadProductImage(form.name.trim() || "product", file);
-      setForm((current) => (current ? { ...current, imagePath: path, imageBucket: uploadedTo } : current));
-      toast.success("Image uploaded — remember to save the product");
+      const { id, bytes } = await uploadProductImage(form.name.trim() || "product", file);
+      setForm((current) => (current ? { ...current, imagePath: id } : current));
+      toast.success(`Image uploaded (${formatBytes(bytes)}) — remember to save the product`);
     } catch (err) {
       setUploadError(
         err instanceof ProductImageUploadError
@@ -84,8 +84,7 @@ export default function Products() {
     }
   };
 
-  const bucket = activeStorageBucket();
-  const previewUrl = productImageUrl(form ?? {}, bucket);
+  const previewUrl = productImageUrl(form);
 
   return (
     <div>
@@ -102,8 +101,8 @@ export default function Products() {
             {(data ?? []).map((p) => (
               <tr key={p.id} className="border-b border-blush/50 hover:bg-blush-light/50">
                 <td className="px-5 py-3.5">
-                  {productImageUrl(p, bucket) ? (
-                    <img src={productImageUrl(p, bucket)!} alt={p.name} loading="lazy" className="w-12 h-12 rounded-lg object-cover border border-blush bg-blush-light" />
+                  {productImageUrl(p) ? (
+                    <img src={productImageUrl(p)!} alt={p.name} loading="lazy" className="w-12 h-12 rounded-lg object-cover border border-blush bg-blush-light" />
                   ) : (
                     <span className="w-12 h-12 rounded-lg border border-dashed border-ink/15 grid place-items-center text-ink/25" title="No image"><ImagePlus size={16} /></span>
                   )}
@@ -116,7 +115,7 @@ export default function Products() {
                 <td className="px-5 py-3.5"><span className={`text-[11px] px-3 py-1 rounded-full ${p.active ? "bg-emerald-100 text-emerald-800" : "bg-gray-100 text-gray-500"}`}>{p.active ? "Live" : "Hidden"}</span></td>
                 <td className="px-5 py-3.5">
                   <div className="flex gap-2">
-                    <button onClick={() => setForm({ id: p.id, name: p.name, kind: p.kind, subcategory: p.subcategory, price: p.price, stock: p.stock, description: p.description ?? "", badge: p.badge ?? "", imagePath: p.imagePath ?? null, imageBucket: p.imageBucket ?? null, active: p.active })} className="text-burgundy hover:bg-blush p-2 rounded-lg"><Pencil size={14} /></button>
+                    <button onClick={() => setForm({ id: p.id, name: p.name, kind: p.kind, subcategory: p.subcategory, price: p.price, stock: p.stock, description: p.description ?? "", badge: p.badge ?? "", imagePath: p.imagePath ?? null, active: p.active })} className="text-burgundy hover:bg-blush p-2 rounded-lg"><Pencil size={14} /></button>
                     <button onClick={() => confirm("Delete this product?") && del.mutate({ id: p.id })} className="text-red-600 hover:bg-red-50 p-2 rounded-lg"><Trash2 size={14} /></button>
                   </div>
                 </td>
@@ -176,7 +175,7 @@ export default function Products() {
                       {uploading ? "Uploading…" : form.imagePath ? "Replace image" : "Choose image"}
                     </button>
                     {form.imagePath && !uploading && (
-                      <button type="button" onClick={() => setForm({ ...form, imagePath: null, imageBucket: null })} className="inline-flex items-center gap-1.5 text-[12.5px] text-ink/50 hover:text-red-600 px-2 py-2"><X size={13} /> Remove</button>
+                      <button type="button" onClick={() => setForm({ ...form, imagePath: null })} className="inline-flex items-center gap-1.5 text-[12.5px] text-ink/50 hover:text-red-600 px-2 py-2"><X size={13} /> Remove</button>
                     )}
                   </div>
                 </div>
@@ -184,10 +183,10 @@ export default function Products() {
               {uploadError && <p className="text-[12px] text-red-600 leading-relaxed">{uploadError}</p>}
               {previewFailed && form.imagePath && (
                 <p className="text-[12px] text-red-600 leading-relaxed">
-                  Saved, but the image could not be loaded from Storage — the file may have been removed, or Cloud Storage is not enabled for this project.
+                  Saved, but the image could not be loaded back — the stored image may have been deleted. Try uploading it again.
                 </p>
               )}
-              {form.imagePath && !uploadError && <p className="text-[11px] text-ink/40 break-all">Stored at <span className="font-mono">{form.imagePath}</span></p>}
+              {form.imagePath && !uploadError && <p className="text-[11px] text-ink/40 break-all">Stored as <span className="font-mono">{form.imagePath}</span></p>}
             </div>
 
             <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} className="accent-burgundy w-4 h-4" /> Visible on website</label>

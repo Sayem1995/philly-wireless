@@ -7,6 +7,7 @@ import { createContext } from "./context.js";
 import { env } from "./lib/env.js";
 import { runWithVercelOidcToken, VERCEL_OIDC_HEADER } from "./lib/gcp-oidc.js";
 import { credentialSource, getDb } from "./queries/firestore.js";
+import { getProductImage } from "./queries/productImages.js";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -46,6 +47,33 @@ app.get("/api/health", async (c) => {
       },
       503,
     );
+  }
+});
+
+/**
+ * Serve a product image.
+ *
+ * Product images live in Firestore as base64 (see `queries/productImages.ts`)
+ * and are handed back as real HTTP image responses rather than as part of the
+ * catalogue JSON, so the browser caches each one independently and the product
+ * query stays small.
+ */
+app.get("/api/images/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    const image = await getProductImage(id);
+    if (!image || !image.data) {
+      return c.body(null, 404);
+    }
+    return c.body(Buffer.from(image.data, "base64"), 200, {
+      "Content-Type": image.contentType,
+      // Ids are unique per upload and never reused, so this is safe to cache hard.
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+    });
+  } catch (err) {
+    console.error("[images] failed to serve image", id, err);
+    return c.body(null, 500);
   }
 });
 

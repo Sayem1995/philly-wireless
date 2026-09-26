@@ -48,6 +48,12 @@ vi.mock("../server/queries/store.js", () => ({
   },
 }));
 
+vi.mock("../server/queries/productImages.js", () => ({
+  createProductImage: vi.fn(),
+  getProductImage: vi.fn(),
+  deleteProductImage: vi.fn(),
+}));
+
 vi.mock("../server/email.js", () => ({
   sendEmail: vi.fn(async () => ({ delivered: false })),
   bookingConfirmationHtml: vi.fn(() => "<html>confirmation</html>"),
@@ -60,9 +66,12 @@ vi.mock("../server/email.js", () => ({
 
 import { appRouter } from "../server/router.js";
 import { store } from "../server/queries/store.js";
+import { createProductImage } from "../server/queries/productImages.js";
 import { sendEmail } from "../server/email.js";
+import { IMAGE_MAX_DATA_CHARS } from "../contracts/productImages.js";
 
 const mockedStore = vi.mocked(store);
+const mockedCreateProductImage = vi.mocked(createProductImage);
 const mockedSendEmail = vi.mocked(sendEmail);
 
 const adminUser = {
@@ -379,30 +388,26 @@ describe("admin product image handling", () => {
     active: true,
   };
 
-  it("forwards the uploaded Storage object path and bucket to the store", async () => {
+  it("forwards the stored image id to the store", async () => {
     mockedStore.upsertProduct.mockResolvedValue(undefined);
 
     await caller(adminUser).admin.upsertProduct({
       ...product,
-      imagePath: "products/iphone-15-pro-1700000000000-ab12cd.webp",
-      imageBucket: "philly-repair.firebasestorage.app",
+      imagePath: "img_abc123def",
     });
 
     expect(mockedStore.upsertProduct).toHaveBeenCalledWith(
-      expect.objectContaining({
-        imagePath: "products/iphone-15-pro-1700000000000-ab12cd.webp",
-        imageBucket: "philly-repair.firebasestorage.app",
-      }),
+      expect.objectContaining({ imagePath: "img_abc123def" }),
     );
   });
 
-  it("defaults both image fields to null when the client omits them", async () => {
+  it("defaults the image to null when the client omits it", async () => {
     mockedStore.upsertProduct.mockResolvedValue(undefined);
 
     await caller(adminUser).admin.upsertProduct(product);
 
     expect(mockedStore.upsertProduct).toHaveBeenCalledWith(
-      expect.objectContaining({ imagePath: null, imageBucket: null }),
+      expect.objectContaining({ imagePath: null }),
     );
   });
 
@@ -413,19 +418,92 @@ describe("admin product image handling", () => {
       ...product,
       id: 7,
       imagePath: null,
-      imageBucket: null,
     });
 
     expect(mockedStore.upsertProduct).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 7, imagePath: null, imageBucket: null }),
+      expect.objectContaining({ id: 7, imagePath: null }),
     );
   });
 
   it("blocks non-admins from attaching an image", async () => {
     await expect(
-      caller(regularUser).admin.upsertProduct({ ...product, imagePath: "products/x.webp" }),
+      caller(regularUser).admin.upsertProduct({ ...product, imagePath: "img_abc123def" }),
     ).rejects.toThrow(/permissions/i);
     expect(mockedStore.upsertProduct).not.toHaveBeenCalled();
+  });
+});
+
+describe("admin.uploadImage", () => {
+  /** A tiny valid base64 payload — content is irrelevant to the router. */
+  const png = "iVBORw0KGgoAAAANSUhEUg==";
+  /** Bytes those characters encode: 4 base64 chars carry 3 bytes. */
+  const expectedBytes = (png.length * 3) / 4;
+
+  it("stores the image and returns its id and size", async () => {
+    mockedCreateProductImage.mockResolvedValue({
+      id: "img_test123",
+      contentType: "image/png",
+      data: png,
+      bytes: expectedBytes,
+      createdAt: new Date(),
+    });
+
+    const res = await caller(adminUser).admin.uploadImage({ data: png, contentType: "image/png" });
+
+    expect(res).toEqual({ id: "img_test123", bytes: expectedBytes });
+    expect(mockedCreateProductImage).toHaveBeenCalledWith({
+      data: png,
+      contentType: "image/png",
+      bytes: expectedBytes,
+    });
+  });
+
+  it("normalises the content type before storing", async () => {
+    mockedCreateProductImage.mockResolvedValue({
+      id: "img_test123",
+      contentType: "image/jpeg",
+      data: png,
+      bytes: 15,
+      createdAt: new Date(),
+    });
+
+    await caller(adminUser).admin.uploadImage({
+      data: png,
+      contentType: "IMAGE/JPEG; charset=binary",
+    });
+
+    expect(mockedCreateProductImage).toHaveBeenCalledWith(
+      expect.objectContaining({ contentType: "image/jpeg" }),
+    );
+  });
+
+  it("rejects a non-image content type", async () => {
+    await expect(
+      caller(adminUser).admin.uploadImage({ data: png, contentType: "application/pdf" }),
+    ).rejects.toThrow(/Unsupported image type/i);
+    expect(mockedCreateProductImage).not.toHaveBeenCalled();
+  });
+
+  it("rejects data that is not base64", async () => {
+    await expect(
+      caller(adminUser).admin.uploadImage({ data: "not base64!!", contentType: "image/png" }),
+    ).rejects.toThrow(/base64/i);
+    expect(mockedCreateProductImage).not.toHaveBeenCalled();
+  });
+
+  it("rejects an oversized payload before touching the database", async () => {
+    const huge = "A".repeat(IMAGE_MAX_DATA_CHARS + 4);
+    await expect(
+      caller(adminUser).admin.uploadImage({ data: huge, contentType: "image/png" }),
+    ).rejects.toThrow();
+    expect(mockedCreateProductImage).not.toHaveBeenCalled();
+  });
+
+  it("blocks non-admins from uploading", async () => {
+    await expect(
+      caller(regularUser).admin.uploadImage({ data: png, contentType: "image/png" }),
+    ).rejects.toThrow(/permissions/i);
+    expect(mockedCreateProductImage).not.toHaveBeenCalled();
   });
 });
 

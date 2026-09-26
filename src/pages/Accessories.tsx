@@ -4,13 +4,11 @@ import Reveal from "@/components/Reveal";
 import { ShoppingBag } from "lucide-react";
 import { STORE } from "@contracts/constants";
 import { productImageUrl } from "@/lib/productImages";
-import { activeStorageBucket } from "@/lib/firebase";
 
 const money = (c: number) => "$" + (c / 100).toFixed(2);
 
 export default function Accessories() {
   const { data, isLoading } = trpc.shop.products.useQuery({ kind: "accessory" });
-  const bucket = activeStorageBucket();
   return (
     <>
       <Seo title="Accessories — Cases, Chargers, Cables & More" description="Phone cases, chargers, MagSafe, power banks, iPad cases, laptop & MacBook chargers, gaming controllers and headphones in Center City Philadelphia." />
@@ -27,7 +25,7 @@ export default function Accessories() {
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {(data ?? []).map((p, i) => {
-              const imageUrl = productImageUrl(p, bucket);
+              const imageUrl = productImageUrl(p);
               return (
               <Reveal key={p.id} delay={(i % 4) * 0.06}>
                 <div className="group bg-white rounded-3xl border border-blush overflow-hidden h-full flex flex-col hover:-translate-y-2 hover:shadow-xl hover:shadow-burgundy/10 transition-all duration-500">
