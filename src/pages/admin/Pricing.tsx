@@ -1,14 +1,20 @@
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { toast } from "sonner";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, ChevronDown } from "lucide-react";
+import { matchingProducts, summarizeStock } from "@/lib/brandStock";
+import { productImageUrl } from "@/lib/productImages";
 
 const input =
   "border border-ink/15 rounded-lg px-3 py-2 text-sm bg-ivory focus:outline-none focus:border-burgundy";
 
+const money = (cents: number) => "$" + (cents / 100).toFixed(2);
+
 export default function Pricing() {
   const utils = trpc.useUtils();
   const { data } = trpc.admin.prices.useQuery();
+  // Read-only here: this page shows what is in stock, it does not edit stock.
+  const { data: products } = trpc.admin.products.useQuery();
 
   const refresh = () => {
     void utils.admin.prices.invalidate();
@@ -37,11 +43,28 @@ export default function Pricing() {
 
   const [form, setForm] = useState({ category: "", brand: "", service: "", priceLabel: "" });
   const [confirmId, setConfirmId] = useState<number | null>(null);
+  // Which price rows are drilled into, keyed by row id.
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  // Hidden products still count as stock you own, so they are shown but flagged.
+  const [showHidden, setShowHidden] = useState(false);
 
   const rows = data ?? [];
   const cats = [...new Set(rows.map((r) => r.category))];
   const brands = [...new Set(rows.map((r) => r.brand))];
   const services = [...new Set(rows.map((r) => r.service))];
+
+  const catalogue = useMemo(
+    () => (products ?? []).filter((p) => showHidden || p.active),
+    [products, showHidden],
+  );
+
+  const toggleRow = (id: number) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const canAdd =
     form.category.trim() && form.brand.trim() && form.service.trim() && form.priceLabel.trim();
@@ -121,35 +144,119 @@ export default function Pricing() {
       <div className="space-y-6">
         {cats.map((c) => (
           <div key={c} className="bg-white rounded-2xl border border-blush overflow-hidden">
-            <h2 className="px-5 py-4 font-serif text-lg capitalize bg-blush-light border-b border-blush">{c}s</h2>
+            <div className="flex items-center justify-between gap-3 px-5 py-4 bg-blush-light border-b border-blush">
+              <h2 className="font-serif text-lg capitalize">{c}s</h2>
+              <label className="flex items-center gap-2 text-[11px] text-ink/50 cursor-pointer">
+                <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)}
+                  className="accent-burgundy w-3.5 h-3.5" />
+                Include hidden products
+              </label>
+            </div>
             <table className="w-full text-sm">
               <tbody>
-                {rows.filter((r) => r.category === c).map((r) => (
-                  <tr key={r.id} className="border-b border-blush/40 last:border-0 hover:bg-blush-light/40">
-                    <td className="px-5 py-3 font-medium w-1/3">{r.brand}</td>
-                    <td className="px-5 py-3 text-ink/55 w-1/3">{r.service}</td>
-                    <td className="px-5 py-3">
-                      <input defaultValue={r.priceLabel}
-                        onBlur={(e) => e.target.value !== r.priceLabel && e.target.value && update.mutate({ id: r.id, priceLabel: e.target.value })}
-                        className="w-full max-w-[200px] border border-ink/15 rounded-lg px-3 py-2 text-sm bg-ivory focus:outline-none focus:border-burgundy" />
-                    </td>
-                    <td className="px-5 py-3 text-right w-[90px]">
-                      {confirmId === r.id ? (
-                        <span className="flex items-center gap-2 justify-end">
-                          <button onClick={() => { remove.mutate({ id: r.id }); setConfirmId(null); }}
-                            className="text-[11px] font-semibold text-destructive hover:underline">Delete</button>
-                          <button onClick={() => setConfirmId(null)}
-                            className="text-[11px] text-ink/45 hover:underline">Cancel</button>
-                        </span>
-                      ) : (
-                        <button onClick={() => setConfirmId(r.id)} aria-label={`Delete ${r.brand} ${r.service}`}
-                          className="text-ink/30 hover:text-destructive transition-colors">
-                          <Trash2 size={16} />
-                        </button>
+                {rows.filter((r) => r.category === c).map((r) => {
+                  const matched = matchingProducts(r.brand, catalogue);
+                  const stock = summarizeStock(matched);
+                  const isOpen = expanded.has(r.id);
+                  const panelId = `stock-${r.id}`;
+                  return (
+                    <Fragment key={r.id}>
+                      <tr
+                        onClick={() => toggleRow(r.id)}
+                        className={`border-b border-blush/40 cursor-pointer transition-colors ${isOpen ? "bg-blush-light/70" : "hover:bg-blush-light/40"}`}
+                      >
+                        <td className="px-5 py-3 font-medium w-1/3">
+                          <span className="flex items-center gap-2">
+                            <ChevronDown size={15}
+                              className={`text-ink/40 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); toggleRow(r.id); }}
+                              aria-expanded={isOpen}
+                              aria-controls={panelId}
+                              className="text-left hover:text-burgundy hover:underline decoration-dotted underline-offset-4"
+                            >
+                              {r.brand}
+                            </button>
+                            {stock.matched > 0 && (
+                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${stock.inStock > 0 ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-700"}`}
+                                title={`${stock.matched} matching product(s)`}>
+                                {stock.totalUnits} in stock
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-ink/55 w-1/3">{r.service}</td>
+                        <td className="px-5 py-3">
+                          <input defaultValue={r.priceLabel}
+                            onClick={(e) => e.stopPropagation()}
+                            onBlur={(e) => e.target.value !== r.priceLabel && e.target.value && update.mutate({ id: r.id, priceLabel: e.target.value })}
+                            className="w-full max-w-[200px] border border-ink/15 rounded-lg px-3 py-2 text-sm bg-ivory focus:outline-none focus:border-burgundy" />
+                        </td>
+                        <td className="px-5 py-3 text-right w-[90px]">
+                          {confirmId === r.id ? (
+                            <span className="flex items-center gap-2 justify-end">
+                              <button onClick={(e) => { e.stopPropagation(); remove.mutate({ id: r.id }); setConfirmId(null); }}
+                                className="text-[11px] font-semibold text-destructive hover:underline">Delete</button>
+                              <button onClick={(e) => { e.stopPropagation(); setConfirmId(null); }}
+                                className="text-[11px] text-ink/45 hover:underline">Cancel</button>
+                            </span>
+                          ) : (
+                            <button onClick={(e) => { e.stopPropagation(); setConfirmId(r.id); }} aria-label={`Delete ${r.brand} ${r.service}`}
+                              className="text-ink/30 hover:text-destructive transition-colors">
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+
+                      {isOpen && (
+                        <tr id={panelId} className="border-b border-blush/40 bg-blush-light/25">
+                          <td colSpan={4} className="px-5 py-4">
+                            {stock.matched === 0 ? (
+                              <p className="text-[12.5px] text-ink/50">
+                                No products in the shop match <span className="font-semibold">{r.brand}</span>.
+                                Add or rename a product under <span className="font-semibold">Products</span> so its name starts
+                                with “{r.brand}”, and its stock will appear here.
+                              </p>
+                            ) : (
+                              <>
+                                <p className="text-[11px] uppercase tracking-[0.15em] text-ink/40 mb-3">
+                                  {stock.matched} product{stock.matched === 1 ? "" : "s"} · {stock.totalUnits} unit
+                                  {stock.totalUnits === 1 ? "" : "s"} in stock
+                                  {stock.soldOut > 0 ? ` · ${stock.soldOut} sold out` : ""}
+                                </p>
+                                <div className="space-y-2">
+                                  {matched.map((p) => (
+                                    <div key={p.id} className="flex items-center gap-3 bg-white rounded-xl border border-blush px-3 py-2">
+                                      <div className="w-9 h-9 shrink-0 rounded-lg border border-blush bg-blush-light overflow-hidden grid place-items-center">
+                                        {productImageUrl(p)
+                                          ? <img src={productImageUrl(p)!} alt="" loading="lazy" className="w-full h-full object-cover" />
+                                          : <span className="text-[9px] text-ink/30">none</span>}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-[13px] font-medium text-ink truncate">
+                                          {p.name}
+                                          {!p.active && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">Hidden</span>}
+                                        </p>
+                                        <p className="text-[11px] text-ink/45">
+                                          {p.subcategory} · {money(p.price)}
+                                        </p>
+                                      </div>
+                                      <span className={`text-[12px] font-semibold shrink-0 px-2.5 py-1 rounded-full ${p.stock > 0 ? (p.stock <= 2 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800") : "bg-red-100 text-red-700"}`}>
+                                        {p.stock > 0 ? `${p.stock} left` : "Sold out"}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                  </tr>
-                ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
