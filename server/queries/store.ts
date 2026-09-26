@@ -49,9 +49,13 @@ async function getRow(col: string, id: number): Promise<Row | undefined> {
 async function createRow(col: string, data: Row): Promise<Row> {
   const db = await getDb();
   const id = await nextId(db, col);
+  // `...data` comes FIRST: the caller is a partial row that may carry an
+  // explicit `id: undefined` (superjson preserves the key), and spreading it
+  // last would let that overwrite the freshly allocated id — writing a document
+  // whose field disagrees with its own path.
   const row: Row = {
-    id,
     ...data,
+    id,
     createdAt: data.createdAt ?? new Date(),
     updatedAt: data.updatedAt ?? new Date(),
   };

@@ -33,8 +33,28 @@ export default function Products() {
   const utils = trpc.useUtils();
   const { data } = trpc.admin.products.useQuery();
   const [form, setForm] = useState<PForm | null>(null);
-  const upsert = trpc.admin.upsertProduct.useMutation({ onSuccess: () => { utils.admin.products.invalidate(); setForm(null); toast.success("Product saved"); } });
-  const del = trpc.admin.deleteProduct.useMutation({ onSuccess: () => { utils.admin.products.invalidate(); toast.success("Product deleted"); } });
+  // A failed save must not be a toast that disappears: the modal stays open and
+  // shows the reason, so "nothing happens" is never the only feedback.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const upsert = trpc.admin.upsertProduct.useMutation({
+    onSuccess: () => {
+      utils.admin.products.invalidate();
+      setForm(null);
+      setSaveError(null);
+      toast.success("Product saved");
+    },
+    onError: (err) => {
+      console.error("[products] save failed:", err);
+      setSaveError(err.message || "The product could not be saved.");
+    },
+  });
+  const del = trpc.admin.deleteProduct.useMutation({
+    onSuccess: () => { utils.admin.products.invalidate(); toast.success("Product deleted"); },
+    onError: (err) => {
+      console.error("[products] delete failed:", err);
+      toast.error(err.message || "The product could not be deleted.");
+    },
+  });
   const input = "border border-ink/15 rounded-xl px-3.5 py-2.5 text-sm bg-ivory focus:outline-none focus:border-burgundy w-full";
 
   // Upload state lives outside the modal markup so it survives re-renders and
@@ -55,6 +75,7 @@ export default function Products() {
     setUploading(false);
     setUploadError(null);
     setPreviewFailed(false);
+    setSaveError(null);
     if (fileInput.current) fileInput.current.value = "";
   }, [isFormOpen, editingId]);
 
@@ -68,8 +89,19 @@ export default function Products() {
     setUploadError(null);
     setPreviewFailed(false);
     setUploading(true);
+    // A hung upload must never leave Save permanently disabled, so this can
+    // only run to completion — success, failure, or timeout.
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new ProductImageUploadError("The upload timed out. Please try again.")),
+        60_000,
+      ),
+    );
     try {
-      const { id, bytes } = await uploadProductImage(form.name.trim() || "product", file);
+      const { id, bytes } = await Promise.race([
+        uploadProductImage(form.name.trim() || "product", file),
+        timeout,
+      ]);
       setForm((current) => (current ? { ...current, imagePath: id } : current));
       toast.success(`Image uploaded (${formatBytes(bytes)}) — remember to save the product`);
     } catch (err) {
@@ -191,9 +223,20 @@ export default function Products() {
 
             <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} className="accent-burgundy w-4 h-4" /> Visible on website</label>
             {uploading && <p className="text-[12px] text-burgundy text-center">Waiting for the image upload to finish…</p>}
+            {saveError && (
+              <p className="text-[12px] text-red-600 leading-relaxed bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
+                {saveError}
+              </p>
+            )}
             <button
               disabled={upsert.isPending || uploading}
-              onClick={() => form.name && form.subcategory && upsert.mutate(form)}
+              onClick={() => {
+                // Say which field is missing rather than appearing to do nothing.
+                if (!form.name.trim()) return setSaveError("Enter a product name.");
+                if (!form.subcategory.trim()) return setSaveError("Enter a category — it becomes a filter tab on the site.");
+                setSaveError(null);
+                upsert.mutate(form);
+              }}
               className="w-full bg-burgundy text-ivory font-semibold py-3 rounded-full hover:bg-burgundy-dark disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {upsert.isPending ? "Saving…" : uploading ? "Uploading image…" : "Save"}
