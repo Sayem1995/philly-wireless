@@ -4,12 +4,13 @@ import Reveal from "@/components/Reveal";
 import { FAQS } from "@/data/static";
 import { Plus } from "lucide-react";
 import { Link } from "react-router";
+import { BRAND } from "@contracts/constants";
 
 export default function Faq() {
   const [open, setOpen] = useState<number | null>(0);
   return (
     <>
-      <Seo title="FAQ — Philly Phone Repair" description="Answers about repair times, parts quality, warranties, data safety, walk-ins and more at Philly Phone Repair." />
+      <Seo title="FAQ" description={`Answers about repair times, parts quality, warranties, data safety, walk-ins and more at ${BRAND.name}.`} />
       <section className="pt-36 pb-14 bg-gradient-to-b from-blush-light to-ivory text-center">
         <Reveal className="max-w-2xl mx-auto px-5">
           <p className="text-xs tracking-[0.35em] uppercase text-burgundy font-semibold mb-4">FAQ</p>

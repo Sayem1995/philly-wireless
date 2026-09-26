@@ -2,12 +2,13 @@ import Seo from "@/components/Seo";
 import Reveal from "@/components/Reveal";
 import { Link } from "react-router";
 import { STATS } from "@/data/static";
+import { BRAND } from "@contracts/constants";
 import { ShieldCheck, HeartHandshake, Wrench } from "lucide-react";
 
 export default function About() {
   return (
     <>
-      <Seo title="About Us — Philly Phone Repair" description="Family-owned device repair shop in Center City Philadelphia since 2011. 20,000+ repairs, certified technicians, lifetime warranty." />
+      <Seo title="About Us" description={`${BRAND.name} is a family-owned device repair shop in ${BRAND.region}. Certified technicians, free diagnostics, lifetime warranty on screen repairs.`} />
       <section className="pt-36 pb-16 bg-gradient-to-b from-blush-light to-ivory text-center">
         <Reveal className="max-w-2xl mx-auto px-5">
           <p className="text-xs tracking-[0.35em] uppercase text-burgundy font-semibold mb-4">About Us</p>
@@ -16,8 +17,8 @@ export default function About() {
       </section>
       <section className="pb-24 max-w-4xl mx-auto px-5">
         <Reveal className="prose-like space-y-6 text-ink/65 leading-relaxed text-[17px]">
-          <p>Philly Phone Repair opened on Chestnut Street in 2011 with one bench, one soldering iron, and a simple promise: fix it fast, fix it right, and tell people the truth about what it costs.</p>
-          <p>Fifteen years and 20,000+ repairs later, we're still family-owned — but the bench got bigger. Our technicians are certified in micro-soldering and board-level diagnostics, which means we fix the devices other shops call "unfixable": water-damaged boards, dead HDMI ports, phones that won't boot.</p>
+          <p>{BRAND.name} — {BRAND.story}</p>
+          <p>Twenty thousand repairs later, we're still family-owned — but the bench got bigger. Our technicians are certified in micro-soldering and board-level diagnostics, which means we fix the devices other shops call "unfixable": water-damaged boards, dead HDMI ports, phones that won't boot.</p>
           <p>We believe repair is better than replace — for your wallet and for the planet. Every device we save from a landfill is a small win, and every customer who walks out with a lifetime warranty card is a bigger one.</p>
         </Reveal>
         <div className="grid md:grid-cols-3 gap-5 mt-16">

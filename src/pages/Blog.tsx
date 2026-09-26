@@ -8,7 +8,7 @@ export default function Blog() {
   const { data, isLoading } = trpc.shop.blogList.useQuery();
   return (
     <>
-      <Seo title="Blog — Repair Tips & Guides | Philly Phone Repair" description="Repair price guides, battery care tips, water damage first aid and more from Philadelphia's repair experts." />
+      <Seo title="Blog — Repair Tips & Guides" description="Repair price guides, battery care tips, water damage first aid and more from Philadelphia's repair experts." />
       <section className="pt-36 pb-14 bg-gradient-to-b from-blush-light to-ivory text-center">
         <Reveal className="max-w-2xl mx-auto px-5">
           <p className="text-xs tracking-[0.35em] uppercase text-burgundy font-semibold mb-4">Blog</p>

@@ -9,8 +9,16 @@
     "skipLibCheck": true,
     "noEmit": true,
     "strict": true,
+    // The palette lives in JSON so `tailwind.config.js` and `vite.config.ts` can
+    // read it too, and the colour tests import it directly.
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["server", "contracts", "scripts", "api"]
+  "include": ["server", "contracts", "scripts", "api"],
+  "exclude": [
+    "node_modules",
+    "scripts/seed.js",
+    "scripts/brand-check.ts"
+  ]
 }

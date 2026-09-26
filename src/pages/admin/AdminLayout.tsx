@@ -52,7 +52,7 @@ export default function AdminLayout() {
   }
   return (
     <div className="min-h-screen bg-[#FAF6F2] flex">
-      <Seo title="Admin — Philly Phone Repair" />
+      <Seo title="Admin" />
       <aside className="w-60 shrink-0 bg-ink text-blush/80 flex flex-col fixed inset-y-0 max-lg:hidden">
         <div className="p-5 border-b border-blush/10"><Logo light /></div>
         <nav className="flex-1 p-3 space-y-1">

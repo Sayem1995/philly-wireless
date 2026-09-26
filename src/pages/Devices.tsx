@@ -32,7 +32,7 @@ export default function Devices() {
 
   return (
     <>
-      <Seo title="Buy Devices — New & Refurbished iPhones, iPads, Tablets | Philly Phone Repair" description="Brand new and certified refurbished iPhones, iPads and tablets for sale in Center City Philadelphia. Every refurbished device includes a 1-year warranty." />
+      <Seo title="Buy Devices — New & Refurbished iPhones, iPads, Tablets" description="Brand new and certified refurbished iPhones, iPads and tablets for sale in Center City Philadelphia. Every refurbished device includes a 1-year warranty." />
       <section className="pt-36 pb-14 bg-gradient-to-b from-blush-light to-ivory text-center">
         <Reveal className="max-w-2xl mx-auto px-5">
           <p className="text-xs tracking-[0.35em] uppercase text-burgundy font-semibold mb-4">Devices We Sell</p>

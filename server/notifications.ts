@@ -1,7 +1,7 @@
 import { store } from "./queries/store.js";
 import { sendEmail } from "./email.js";
 import { sendSms } from "./sms.js";
-import { STORE } from "../contracts/constants.js";
+import { STORE, BRAND } from "../contracts/constants.js";
 
 /**
  * Customer-facing repair notifications.
@@ -40,6 +40,26 @@ export type NotifyResult = { email: boolean; sms: boolean; attempted: boolean };
 
 const REF = (id: number) => `#PPR-${id}`;
 
+/** Inline email palette — email clients cannot use CSS custom properties, so
+ *  the theme colours are interpolated from the same `BRAND_*` config that
+ *  drives the website. */
+const C = {
+  primary: BRAND.colors.primary.DEFAULT,
+  secondary: BRAND.colors.secondary.DEFAULT,
+  surface: BRAND.colors.surface,
+  ink: BRAND.colors.ink,
+  muted: "#8a7168",
+} as const;
+
+/** Store wordmark, with the trailing words in the brand colour. */
+function wordmark(): string {
+  const { wordmarkPrimary, wordmarkAccent } = BRAND;
+  if (!wordmarkAccent) {
+    return `<span style="color:${C.primary};">${wordmarkPrimary}</span>`;
+  }
+  return `${wordmarkPrimary} <span style="color:${C.primary};">${wordmarkAccent}</span>`;
+}
+
 function prettyDate(iso: string): string {
   const d = new Date(`${iso}T12:00:00`);
   return Number.isNaN(d.getTime())
@@ -48,14 +68,14 @@ function prettyDate(iso: string): string {
 }
 
 function shell(title: string, body: string): string {
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#FFFDF7;font-family:Georgia,serif;">
+  return `<!doctype html><html><body style="margin:0;padding:0;background:${C.surface};font-family:Georgia,serif;">
   <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
-    <div style="text-align:center;padding-bottom:20px;border-bottom:2px solid #F3D5D8;">
-      <p style="font-size:22px;color:#2B1A18;margin:0;">Philly <span style="color:#7F1D1D;">Phone Repair</span></p>
+    <div style="text-align:center;padding-bottom:20px;border-bottom:2px solid ${C.secondary};">
+      <p style="font-size:22px;color:${C.ink};margin:0;">${wordmark()}</p>
     </div>
-    <h1 style="font-size:22px;color:#2B1A18;text-align:center;margin:26px 0 10px;">${title}</h1>
+    <h1 style="font-size:22px;color:${C.ink};text-align:center;margin:26px 0 10px;">${title}</h1>
     ${body}
-    <div style="margin-top:28px;padding-top:18px;border-top:2px solid #F3D5D8;text-align:center;font-size:12px;color:#8a7168;">
+    <div style="margin-top:28px;padding-top:18px;border-top:2px solid ${C.secondary};text-align:center;font-size:12px;color:${C.muted};">
       <p style="margin:4px 0;">${STORE.address}, ${STORE.city}</p>
       <p style="margin:4px 0;">${STORE.phone} · ${STORE.email}</p>
     </div>
@@ -77,14 +97,14 @@ function copyFor(
         sms: `${shop}: Booking received for your ${b.device} (${b.repairType}) on ${prettyDate(b.date)} at ${b.timeSlot}. Ref ${REF(b.id)}. Questions? ${STORE.phone}`,
         html: shell(
           "We've got your booking",
-          `<p style="color:#8a7168;font-size:14px;line-height:1.7;margin:0 0 16px;">Hi ${first}, thanks — your repair visit is booked. Here's what we have:</p>
-           <ul style="color:#2B1A18;font-size:14px;line-height:1.9;margin:0 0 16px;padding-left:18px;">
+          `<p style="color:${C.muted};font-size:14px;line-height:1.7;margin:0 0 16px;">Hi ${first}, thanks — your repair visit is booked. Here's what we have:</p>
+           <ul style="color:${C.ink};font-size:14px;line-height:1.9;margin:0 0 16px;padding-left:18px;">
              <li>Reference: <strong>${REF(b.id)}</strong></li>
              <li>Device: ${b.device}</li>
              <li>Repair: ${b.repairType}</li>
              <li>When: ${when}</li>
            </ul>
-           <p style="color:#8a7168;font-size:13px;line-height:1.7;margin:0;">Diagnostics are always free and we'll confirm the final quote before any work begins. Need to change it? Call ${STORE.phone}.</p>`,
+           <p style="color:${C.muted};font-size:13px;line-height:1.7;margin:0;">Diagnostics are always free and we'll confirm the final quote before any work begins. Need to change it? Call ${STORE.phone}.</p>`,
         ),
       };
 
@@ -114,14 +134,14 @@ function copyFor(
         sms: `${shop}: Good news — your ${b.device} is repaired and ready to collect at ${STORE.address}.${b.warrantyUntil ? ` Warranty to ${b.warrantyUntil}.` : ""} Ref ${REF(b.id)}.`,
         html: shell(
           "Your device is ready to collect",
-          `<p style="color:#8a7168;font-size:14px;line-height:1.7;margin:0 0 16px;">Hi ${first}, your <strong>${b.device}</strong> is repaired and ready for pickup.</p>
-           <ul style="color:#2B1A18;font-size:14px;line-height:1.9;margin:0 0 16px;padding-left:18px;">
+          `<p style="color:${C.muted};font-size:14px;line-height:1.7;margin:0 0 16px;">Hi ${first}, your <strong>${b.device}</strong> is repaired and ready for pickup.</p>
+           <ul style="color:${C.ink};font-size:14px;line-height:1.9;margin:0 0 16px;padding-left:18px;">
              <li>Reference: <strong>${REF(b.id)}</strong></li>
              <li>Repair: ${b.repairType}</li>
              <li>Where: ${STORE.address}, ${STORE.city}</li>
              ${b.warrantyUntil ? `<li>Warranty valid until: <strong>${b.warrantyUntil}</strong></li>` : ""}
            </ul>
-           <p style="color:#8a7168;font-size:13px;line-height:1.7;margin:0;">${STORE.hours.map((h) => `${h.d}: ${h.h}`).join(" · ")}</p>`,
+           <p style="color:${C.muted};font-size:13px;line-height:1.7;margin:0;">${STORE.hours.map((h) => `${h.d}: ${h.h}`).join(" · ")}</p>`,
         ),
       };
 

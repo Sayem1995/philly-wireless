@@ -1,3 +1,38 @@
+/**
+ * Brand colours.
+ *
+ * The site's pages use the class names `burgundy` / `blush` / `ivory` / `ink`
+ * everywhere. Those names are kept so no component has to change, but the
+ * VALUES now come from CSS custom properties that `vite.config.ts` writes into
+ * `src/index.css` from the `BRAND_*` environment variables. A second store
+ * therefore gets its own palette from configuration alone.
+ *
+ * `rgb(var(--x) / <alpha-value>)` (rather than a bare `var()`) is what keeps
+ * Tailwind's opacity modifiers working, e.g. `bg-burgundy/40`, `text-ink/55`,
+ * `border-blush/40`.
+ */
+const DEFAULT_COLORS = require('./contracts/brand-colors.json')
+
+/** `#7F1D1D` -> `127 29 29`, the form CSS custom properties store channels in. */
+const triplet = (hex) => {
+  const clean = hex.replace(/^#/, '')
+  const full =
+    clean.length === 3
+      ? clean.split('').map((c) => c + c).join('')
+      : clean
+  const int = Number.parseInt(full, 16)
+  return `${(int >> 16) & 255} ${(int >> 8) & 255} ${int & 255}`
+}
+
+/**
+ * The custom properties are declared in `src/index.css`, which only exists in
+ * the browser bundle — but these same utilities are compiled into the server
+ * build too. Supplying the default as the `var()` fallback means the colour is
+ * always resolvable, and deployments restyle everything by overriding the
+ * variables.
+ */
+const brand = (name, hex) => `rgb(var(--brand-${name}, ${triplet(hex)}) / <alpha-value>)`
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ["class"],
@@ -10,17 +45,20 @@ module.exports = {
       },
       colors: {
         burgundy: {
-          DEFAULT: "#7F1D1D",
-          dark: "#5C1515",
-          light: "#9B2C2C",
+          DEFAULT: brand('primary', DEFAULT_COLORS.primary.DEFAULT),
+          dark: brand('primary-dark', DEFAULT_COLORS.primary.dark),
+          light: brand('primary-light', DEFAULT_COLORS.primary.light),
         },
         blush: {
-          DEFAULT: "#F3D5D8",
-          dark: "#E8B8BE",
-          light: "#FAE9EB",
+          DEFAULT: brand('secondary', DEFAULT_COLORS.secondary.DEFAULT),
+          dark: brand('secondary-dark', DEFAULT_COLORS.secondary.dark),
+          light: brand('secondary-light', DEFAULT_COLORS.secondary.light),
         },
-        ivory: "#FFFDF7",
-        ink: "#2B1A18",
+        ivory: brand('surface', DEFAULT_COLORS.surface),
+        ink: brand('ink', DEFAULT_COLORS.ink),
+        // Named `accent-brand` rather than `accent` because `accent` is already
+        // a shadcn/ui semantic colour below.
+        'accent-brand': brand('accent', DEFAULT_COLORS.accent),
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

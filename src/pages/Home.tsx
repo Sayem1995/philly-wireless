@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import Seo from "@/components/Seo";
 import Reveal from "@/components/Reveal";
 import { SERVICES, TESTIMONIALS, STATS, PROCESS } from "@/data/static";
-import { STORE } from "@contracts/constants";
+import { STORE, BRAND } from "@contracts/constants";
+import { cssVarRgb } from "@/lib/theme";
 
 function Counter({ value, suffix, decimals = 0 }: { value: number; suffix: string; decimals?: number }) {
   const [n, setN] = useState(0);
@@ -33,7 +34,7 @@ function Counter({ value, suffix, decimals = 0 }: { value: number; suffix: strin
 export default function Home() {
   return (
     <>
-      <Seo title="Philly Phone Repair — Same-Day Phone, Tablet & Laptop Repair in Center City" description="Same-day iPhone, Samsung, iPad, MacBook & console repair at 1033 Chestnut Street, Philadelphia. Lifetime warranty. Walk-ins welcome." />
+      <Seo title={`Same-Day Phone, Tablet & Laptop Repair in ${BRAND.region}`} description={`Same-day iPhone, Samsung, iPad, MacBook & console repair at ${STORE.address}, ${STORE.city}. Lifetime warranty. Walk-ins welcome.`} />
       {/* HERO */}
       <section className="relative min-h-[92vh] flex items-center overflow-hidden pt-24">
         <div className="absolute inset-0 bg-gradient-to-br from-ivory via-blush-light to-blush" />
@@ -45,7 +46,7 @@ export default function Home() {
           <div>
             <motion.p initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}
               className="text-xs tracking-[0.35em] uppercase text-burgundy font-semibold mb-6 flex items-center gap-3">
-              <span className="w-8 h-px bg-burgundy" /> Center City · Philadelphia
+              <span className="w-8 h-px bg-burgundy" /> {BRAND.region}
             </motion.p>
             <motion.h1 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.1 }}
               className="font-serif text-5xl md:text-7xl leading-[1.05] text-ink">
@@ -165,7 +166,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-5">
           <Reveal className="text-center max-w-xl mx-auto mb-6">
             <p className="text-xs tracking-[0.35em] uppercase text-burgundy font-semibold mb-4">Reviews</p>
-            <h2 className="font-serif text-4xl md:text-5xl text-ink">Philly trusts us with their phones.</h2>
+            <h2 className="font-serif text-4xl md:text-5xl text-ink">{BRAND.cityLabel} trusts us with their phones.</h2>
           </Reveal>
           <Reveal className="flex items-center justify-center gap-3 mb-14">
             <span className="w-10 h-10 rounded-xl bg-white border border-blush grid place-items-center font-bold text-lg text-[#4285F4] shadow-sm">G</span>
@@ -193,7 +194,7 @@ export default function Home() {
       {/* CTA */}
       <section className="py-24 bg-gradient-to-br from-burgundy to-burgundy-dark text-ivory text-center relative overflow-hidden">
         <motion.div className="absolute inset-0 opacity-10" animate={{ backgroundPosition: ["0% 0%", "100% 100%"] }} transition={{ duration: 20, repeat: Infinity, repeatType: "reverse" }}
-          style={{ backgroundImage: "radial-gradient(circle at 30% 50%, #F3D5D8 0%, transparent 40%)" }} />
+          style={{ backgroundImage: `radial-gradient(circle at 30% 50%, ${cssVarRgb("--brand-secondary", "243 213 216")} 0%, transparent 40%)` }} />
         <Reveal className="relative max-w-2xl mx-auto px-5">
           <h2 className="font-serif text-4xl md:text-5xl mb-5">Broken device?<br />We'll fix it today.</h2>
           <p className="text-blush/80 mb-9">Free diagnostics · No appointment needed · Most repairs in under an hour</p>

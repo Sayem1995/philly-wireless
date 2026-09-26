@@ -121,7 +121,7 @@ export default function Booking() {
 
   return (
     <>
-      <Seo title="Book a Repair — Philly Phone Repair" description="Book your repair in under a minute: choose the problem, your device, a time slot, and you're set." />
+      <Seo title="Book a Repair" description="Book your repair in under a minute: choose the problem, your device, a time slot, and you're set." />
       <section className="pt-32 pb-20 min-h-[85vh] bg-gradient-to-b from-blush-light to-ivory">
         <div className="max-w-3xl mx-auto px-5">
           {bookingId === null && (

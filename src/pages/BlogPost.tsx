@@ -3,6 +3,7 @@ import { trpc } from "@/providers/trpc";
 import Seo from "@/components/Seo";
 import Reveal from "@/components/Reveal";
 import { ArrowLeft } from "lucide-react";
+import { BRAND } from "@contracts/constants";
 
 export default function BlogPost() {
   const { slug } = useParams<{ slug: string }>();
@@ -11,13 +12,13 @@ export default function BlogPost() {
   if (!post) return <p className="pt-48 text-center text-ink/40">Post not found.</p>;
   return (
     <>
-      <Seo title={`${post.title} | Philly Phone Repair`} description={post.excerpt} />
+      <Seo title={`${post.title}`} description={post.excerpt} />
       <section className="pt-36 pb-10 bg-gradient-to-b from-blush-light to-ivory">
         <Reveal className="max-w-3xl mx-auto px-5 text-center">
           <Link to="/blog" className="inline-flex items-center gap-2 text-sm text-burgundy font-medium mb-8 hover:gap-3 transition-all"><ArrowLeft size={15} /> All posts</Link>
           <span className="block text-[11px] tracking-[0.25em] uppercase text-burgundy font-semibold mb-4">{post.tag}</span>
           <h1 className="font-serif text-4xl md:text-5xl text-ink leading-tight">{post.title}</h1>
-          <p className="text-sm text-ink/40 mt-5">{new Date(post.publishedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })} · Philly Phone Repair</p>
+          <p className="text-sm text-ink/40 mt-5">{new Date(post.publishedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })} · {BRAND.name}</p>
         </Reveal>
       </section>
       <article className="pb-24 max-w-3xl mx-auto px-5">

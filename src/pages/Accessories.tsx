@@ -13,7 +13,7 @@ export default function Accessories() {
   const bucket = activeStorageBucket();
   return (
     <>
-      <Seo title="Accessories — Cases, Chargers, Cables & More | Philly Phone Repair" description="Phone cases, chargers, MagSafe, power banks, iPad cases, laptop & MacBook chargers, gaming controllers and headphones in Center City Philadelphia." />
+      <Seo title="Accessories — Cases, Chargers, Cables & More" description="Phone cases, chargers, MagSafe, power banks, iPad cases, laptop & MacBook chargers, gaming controllers and headphones in Center City Philadelphia." />
       <section className="pt-36 pb-14 bg-gradient-to-b from-blush-light to-ivory text-center">
         <Reveal className="max-w-2xl mx-auto px-5">
           <p className="text-xs tracking-[0.35em] uppercase text-burgundy font-semibold mb-4">Accessories</p>

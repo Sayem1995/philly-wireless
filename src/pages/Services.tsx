@@ -7,7 +7,7 @@ import { SERVICES } from "@/data/static";
 export default function Services() {
   return (
     <>
-      <Seo title="Repair Services — Philly Phone Repair" description="Screen, battery, charging port, water damage, camera, speaker, iPad, laptop, MacBook and console HDMI repair in Center City Philadelphia." />
+      <Seo title="Repair Services" description="Screen, battery, charging port, water damage, camera, speaker, iPad, laptop, MacBook and console HDMI repair in Center City Philadelphia." />
       <section className="pt-36 pb-16 bg-gradient-to-b from-blush-light to-ivory text-center">
         <Reveal className="max-w-2xl mx-auto px-5">
           <p className="text-xs tracking-[0.35em] uppercase text-burgundy font-semibold mb-4">Repair Services</p>

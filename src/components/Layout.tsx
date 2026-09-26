@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { Menu, X, Phone, MapPin, Clock, MessageCircle, Facebook, Instagram, Twitter, ArrowUp } from "lucide-react";
 import Logo from "./Logo";
-import { STORE } from "@contracts/constants";
+import { STORE, BRAND } from "@contracts/constants";
+import { compactHours } from "@contracts/brand";
 import { trpc } from "@/providers/trpc";
 import { toast } from "sonner";
 
@@ -30,7 +31,7 @@ function Navbar() {
   return (
     <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-500 ${scrolled ? "bg-ivory/90 backdrop-blur-lg shadow-[0_1px_0_rgba(127,29,29,0.08)]" : "bg-transparent"}`}>
       <div className="max-w-7xl mx-auto px-5 h-[76px] flex items-center justify-between">
-        <Link to="/" aria-label="Philly Phone Repair home"><Logo /></Link>
+        <Link to="/" aria-label={`${STORE.name} home`}><Logo /></Link>
         <nav className="hidden lg:flex items-center gap-7" aria-label="Main navigation">
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} onClick={() => setOpen(false)}
@@ -78,7 +79,7 @@ function Footer() {
         <div>
           <Logo light />
           <p className="text-sm leading-relaxed mt-5 text-blush/60">
-            Fast, honest device repair in the heart of Philadelphia. Walk-ins welcome. Lifetime warranty on screen repairs.
+            Fast, honest device repair in the heart of {BRAND.region}. Walk-ins welcome. Lifetime warranty on screen repairs.
           </p>
           <div className="flex gap-3 mt-6">
             {[Facebook, Instagram, Twitter].map((Icon, i) => (
@@ -92,7 +93,7 @@ function Footer() {
           <h4 className="text-ivory font-serif text-lg mb-4">Visit Us</h4>
           <p className="text-sm flex items-start gap-2.5 mb-3"><MapPin size={15} className="mt-0.5 shrink-0 text-blush" />{STORE.address}<br />{STORE.city}</p>
           <a href={STORE.phoneHref} className="text-sm flex items-center gap-2.5 mb-3 hover:text-ivory transition-colors"><Phone size={15} className="text-blush" />{STORE.phone}</a>
-          <p className="text-sm flex items-start gap-2.5"><Clock size={15} className="mt-0.5 shrink-0 text-blush" />Mon–Fri 9–7 · Sat 10–6 · Sun 12–5</p>
+          <p className="text-sm flex items-start gap-2.5"><Clock size={15} className="mt-0.5 shrink-0 text-blush" />{compactHours(BRAND.hours)}</p>
         </div>
         <div>
           <h4 className="text-ivory font-serif text-lg mb-4">Quick Links</h4>
@@ -112,8 +113,8 @@ function Footer() {
       </div>
       <div className="border-t border-blush/10">
         <div className="max-w-7xl mx-auto px-5 py-5 flex flex-wrap justify-between gap-3 text-xs text-blush/40">
-          <span>© {new Date().getFullYear()} Philly Phone Repair. All rights reserved.</span>
-          <span>1033 Chestnut Street, Philadelphia, PA 19107</span>
+          <span>© {new Date().getFullYear()} {STORE.name}. All rights reserved.</span>
+          <span>{STORE.address}, {STORE.city}</span>
         </div>
       </div>
     </footer>
@@ -134,7 +135,7 @@ export default function Layout() {
       <Navbar />
       <main><Outlet /></main>
       <Footer />
-      <a href={`https://wa.me/12155550123`} target="_blank" rel="noreferrer" aria-label="Chat with us"
+      <a href={`https://wa.me/${BRAND.whatsapp}`} target="_blank" rel="noreferrer" aria-label="Chat with us"
         className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-burgundy text-ivory grid place-items-center shadow-lg shadow-burgundy/30 hover:bg-burgundy-dark hover:-translate-y-1 transition-all duration-300">
         <MessageCircle size={22} />
       </a>

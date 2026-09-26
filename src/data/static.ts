@@ -2,6 +2,7 @@ import {
   Smartphone, Battery, Plug, Droplets, Camera, Volume2, Mic,
   Layers, Laptop, Tablet, Gamepad2, DatabaseBackup,
 } from "lucide-react";
+import { STORE, BRAND } from "@contracts/constants";
 
 export const SERVICES = [
   { icon: Smartphone, title: "Screen Replacement", desc: "Cracked, shattered or unresponsive displays replaced with premium panels — most in under an hour.", price: "From $79" },
@@ -20,7 +21,7 @@ export const SERVICES = [
 
 export const TESTIMONIALS = [
   { text: "Fixed my iPhone 14 Pro screen in 25 minutes. Quality is indistinguishable from original, and the lifetime warranty gives real peace of mind.", name: "Sarah Mitchell", area: "Center City" },
-  { text: "Dropped my Samsung in the Schuylkill and thought it was done. They recovered all my data and replaced the charging port the same day.", name: "James Rodriguez", area: "University City" },
+  { text: "Dropped my Samsung in the river and thought it was done. They recovered all my data and replaced the charging port the same day.", name: "James Rodriguez", area: "University City" },
   { text: "Best prices in Philly for iPad repairs. Professional staff, clean shop, and they explained everything before touching anything.", name: "Emily Chen", area: "Rittenhouse" },
   { text: "PS5 HDMI port died two days before a tournament. They micro-soldered a new one that same afternoon. Absolute lifesavers.", name: "Marcus Thompson", area: "South Philly" },
 ];
@@ -29,16 +30,16 @@ export const FAQS = [
   { q: "How long does a repair take?", a: "Most screen and battery replacements are completed in 30–60 minutes. Complex repairs like water damage or board-level work may take 24–48 hours. We always give an accurate time estimate before starting." },
   { q: "Do you use OEM parts?", a: "We use premium-quality parts that meet or exceed OEM specifications, and for iPhones we offer both high-grade aftermarket and genuine Apple parts. All parts are backed by warranty." },
   { q: "What warranty do you offer?", a: "Lifetime warranty on screen repairs, 90 days on batteries and all other repairs. If a part we installed fails under normal use, we replace it free." },
-  { q: "Do I need an appointment?", a: "No — walk-ins are always welcome at 1033 Chestnut Street. Booking online guarantees your time slot and priority service." },
+  { q: "Do I need an appointment?", a: `No — walk-ins are always welcome at ${STORE.address}. Booking online guarantees your time slot and priority service.` },
   { q: "Is my data safe during repair?", a: "Absolutely. We never access personal data, follow strict privacy protocols, and most repairs never require your passcode. We recommend a backup as a precaution." },
   { q: "Do you buy or trade in phones?", a: "Yes — we buy used iPhones, Samsungs and Pixels for cash or store credit, and every refurbished device we sell includes a 1-year store warranty." },
   { q: "Can you recover data from a dead phone?", a: "In most cases, yes. Our board-level technicians recover photos, contacts and files from water-damaged and non-booting devices. Diagnostics are free." },
-  { q: "Where are you located?", a: "1033 Chestnut Street in Center City Philadelphia — two blocks from Jefferson Station, with garages nearby on 11th and Chestnut." },
+  { q: "Where are you located?", a: `${STORE.address} in ${STORE.city} — stop by during opening hours or call ${STORE.phone} and we'll point you to the nearest parking.` },
 ];
 
 export const STATS = [
   { value: 20000, suffix: "+", label: "Devices Repaired" },
-  { value: 15, suffix: " yrs", label: "Serving Philadelphia" },
+  { value: 15, suffix: " yrs", label: `Serving ${BRAND.region}` },
   { value: 4.9, decimals: 1, suffix: "★", label: "Google Rating" },
   { value: 30, suffix: " min", label: "Average Repair" },
 ];

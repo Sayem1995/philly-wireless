@@ -4,6 +4,7 @@ import {
   staffNotificationHtml,
   sendEmail,
 } from "../server/email.js";
+import { BRAND, STORE } from "../contracts/constants.js";
 
 const booking = {
   id: 128,
@@ -30,9 +31,14 @@ describe("bookingConfirmationHtml", () => {
   it("renders a full standalone HTML document", () => {
     const html = bookingConfirmationHtml(booking);
     expect(html).toMatch(/^<!doctype html>/i);
-    // The wordmark is split by a <span> around "Phone Repair".
-    expect(html).toMatch(/Philly\s*<span[^>]*>Phone Repair<\/span>/);
-    expect(html).toContain("1033 Chestnut Street");
+    // The wordmark and address come from the brand config, so this asserts
+    // against the configured store rather than a hardcoded "Philly Phone
+    // Repair" — which is what makes the suite meaningful for a second store.
+    // The wordmark is split by a <span> around the accent words, so the two
+    // halves are asserted separately rather than as one contiguous string.
+    expect(html).toContain(BRAND.wordmarkPrimary);
+    expect(html).toContain(BRAND.wordmarkAccent);
+    expect(html).toContain(STORE.address);
   });
 
   it("formats the booking date in a readable form", () => {
