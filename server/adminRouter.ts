@@ -563,6 +563,41 @@ export const adminRouter = createRouter({
       return { ok: true, id: row.id };
     }),
 
+  /**
+   * Bulk-add price rows.
+   *
+   * Additive only — existing rows are never overwritten or removed, and
+   * duplicates are skipped — so pasting a block twice is safe and a mistaken
+   * import can always be cleaned up by deleting the rows it added.
+   */
+  createPrices: adminQuery
+    .input(
+      z.object({
+        rows: z
+          .array(
+            z.object({
+              category: z.string().min(1).max(40),
+              brand: z.string().min(1).max(80),
+              service: z.string().min(1).max(80),
+              priceLabel: z.string().min(1).max(80),
+            }),
+          )
+          .min(1)
+          .max(200),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const normalised = input.rows.map((row) => ({
+        category: row.category.trim().toLowerCase(),
+        brand: row.brand.trim(),
+        service: row.service.trim(),
+        priceLabel: row.priceLabel.trim(),
+      }));
+
+      const { created, skipped } = await store.createPrices(normalised);
+      return { created: created.length, skipped: skipped.length, total: normalised.length };
+    }),
+
   deletePrice: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {

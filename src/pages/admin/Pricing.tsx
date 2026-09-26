@@ -1,14 +1,23 @@
 import { Fragment, useMemo, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { toast } from "sonner";
-import { Trash2, Plus, ChevronDown } from "lucide-react";
+import { Trash2, Plus, ChevronDown, Upload, ClipboardList } from "lucide-react";
 import { matchingProducts, summarizeStock } from "@/lib/brandStock";
 import { productImageUrl } from "@/lib/productImages";
+import { parsePriceRows, partitionNewRows, type ParsedPriceRow } from "@/lib/priceImport";
 
 const input =
   "border border-ink/15 rounded-lg px-3 py-2 text-sm bg-ivory focus:outline-none focus:border-burgundy";
 
 const money = (cents: number) => "$" + (cents / 100).toFixed(2);
+
+/** Example showing the accepted shape — doubles as the empty-state hint. */
+const IMPORT_PLACEHOLDER = `category | brand | service | price
+ipad | iPad | Screen Replacement | From $220
+ipad | iPad Mini | Screen Replacement | From $220
+ipad | iPad Air | Screen Replacement | From $250
+ipad | iPad Pro 11 | Screen Replacement | From $280
+ipad | iPad Pro 12.9 | Screen Replacement | From $300`;
 
 export default function Pricing() {
   const utils = trpc.useUtils();
@@ -41,17 +50,43 @@ export default function Pricing() {
     onError: (e) => toast.error(e.message),
   });
 
+  const bulk = trpc.admin.createPrices.useMutation({
+    onSuccess: (result) => {
+      refresh();
+      setImportResult(result);
+      setImportText("");
+      toast.success(
+        result.created > 0
+          ? `Added ${result.created} price row${result.created === 1 ? "" : "s"}`
+          : "Nothing to add — every row already exists",
+      );
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const [form, setForm] = useState({ category: "", brand: "", service: "", priceLabel: "" });
   const [confirmId, setConfirmId] = useState<number | null>(null);
   // Which price rows are drilled into, keyed by row id.
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   // Hidden products still count as stock you own, so they are shown but flagged.
   const [showHidden, setShowHidden] = useState(false);
+  // Bulk import
+  const [importText, setImportText] = useState("");
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number; total: number } | null>(null);
 
-  const rows = data ?? [];
+  // Memoised so the import preview below does not re-diff on every render.
+  const rows = useMemo(() => data ?? [], [data]);
   const cats = [...new Set(rows.map((r) => r.category))];
   const brands = [...new Set(rows.map((r) => r.brand))];
   const services = [...new Set(rows.map((r) => r.service))];
+
+  // Live preview: parse and diff the paste before anything is written, so a
+  // mistake is visible as a count rather than discovered on the public site.
+  const preview = useMemo(() => {
+    const parsed = parsePriceRows(importText);
+    const { fresh, duplicates } = partitionNewRows(parsed.rows, rows);
+    return { ...parsed, fresh, duplicates };
+  }, [importText, rows]);
 
   const catalogue = useMemo(
     () => (products ?? []).filter((p) => showHidden || p.active),
@@ -132,6 +167,121 @@ export default function Pricing() {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* ---------- bulk import ---------- */}
+      <div className="bg-white rounded-2xl border border-blush p-6 mb-8">
+        <h2 className="font-serif text-lg mb-1 flex items-center gap-2">
+          <ClipboardList size={18} className="text-burgundy" /> Add many prices at once
+        </h2>
+        <p className="text-xs text-ink/45 mb-4">
+          Paste rows, or upload a <span className="font-mono">.csv</span> /{" "}
+          <span className="font-mono">.txt</span> file. One row per line:{" "}
+          <span className="font-mono">category | brand | service | price</span>. A header row is
+          optional; tab- and comma-separated work too. Rows that already exist are skipped, so
+          importing the same block twice changes nothing.
+        </p>
+
+        <textarea
+          value={importText}
+          onChange={(e) => { setImportText(e.target.value); setImportResult(null); }}
+          rows={8}
+          spellCheck={false}
+          placeholder={IMPORT_PLACEHOLDER}
+          className={`${input} w-full font-mono text-[12.5px] resize-y`}
+        />
+
+        <div className="flex flex-wrap items-center gap-3 mt-4">
+          <label className="inline-flex items-center gap-2 text-[12.5px] text-ink/55 cursor-pointer hover:text-burgundy">
+            <Upload size={14} /> Load a file
+            <input type="file" accept=".csv,.txt,text/csv,text/plain" className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setImportText(await file.text());
+                setImportResult(null);
+                e.target.value = "";
+              }} />
+          </label>
+
+          <button
+            type="button"
+            disabled={preview.fresh.length === 0 || bulk.isPending}
+            onClick={() =>
+              bulk.mutate({
+                rows: preview.fresh.map((row: ParsedPriceRow) => ({
+                  category: row.category,
+                  brand: row.brand,
+                  service: row.service,
+                  priceLabel: row.priceLabel,
+                })),
+              })
+            }
+            className="bg-burgundy text-ivory text-sm font-semibold px-6 py-2.5 rounded-full hover:bg-burgundy-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {bulk.isPending
+              ? "Importing…"
+              : preview.fresh.length === 0
+                ? "Import rows"
+                : `Import ${preview.fresh.length} row${preview.fresh.length === 1 ? "" : "s"}`}
+          </button>
+
+          {importText.trim() !== "" && (
+            <>
+              <span className="text-[12.5px] text-ink/55">
+                {preview.rows.length} parsed
+                {preview.fresh.length > 0 && <> · <span className="text-emerald-700 font-semibold">{preview.fresh.length} new</span></>}
+                {preview.duplicates.length > 0 && <> · {preview.duplicates.length} already present</>}
+                {preview.issues.length > 0 && <> · <span className="text-red-600 font-semibold">{preview.issues.length} problem{preview.issues.length === 1 ? "" : "s"}</span></>}
+              </span>
+              <button type="button" onClick={() => { setImportText(""); setImportResult(null); }}
+                className="text-[12.5px] text-ink/45 hover:text-destructive">Clear</button>
+            </>
+          )}
+        </div>
+
+        {preview.issues.length > 0 && (
+          <ul className="mt-4 space-y-1.5 bg-red-50 border border-red-200 rounded-xl px-3.5 py-3">
+            {preview.issues.slice(0, 12).map((issue, i) => (
+              <li key={i} className="text-[12px] text-red-700">
+                <span className="font-semibold">Line {issue.line}:</span> {issue.message}
+              </li>
+            ))}
+            {preview.issues.length > 12 && (
+              <li className="text-[12px] text-red-700">…and {preview.issues.length - 12} more.</li>
+            )}
+            <li className="text-[11.5px] text-red-700/70 pt-1">
+              Rows with problems are left out; the rest will still import.
+            </li>
+          </ul>
+        )}
+
+        {preview.fresh.length > 0 && (
+          <div className="mt-4 border border-blush rounded-xl overflow-hidden">
+            <p className="text-[11px] uppercase tracking-[0.15em] text-ink/40 px-3.5 py-2.5 bg-blush-light/60">
+              Will be added
+            </p>
+            <div className="max-h-56 overflow-y-auto divide-y divide-blush/50">
+              {preview.fresh.map((row, i) => (
+                <div key={i} className="flex items-center gap-3 px-3.5 py-2 text-[12.5px]">
+                  <span className="font-mono text-ink/40 w-16 shrink-0">{row.category}</span>
+                  <span className="font-medium flex-1 min-w-0 truncate">{row.brand}</span>
+                  <span className="text-ink/50 flex-1 min-w-0 truncate">{row.service}</span>
+                  <span className="font-semibold text-burgundy shrink-0">{row.priceLabel}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {importResult && (
+          <p className="mt-4 text-[12.5px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
+            Imported {importResult.created} of {importResult.total} row
+            {importResult.total === 1 ? "" : "s"}
+            {importResult.skipped > 0 && ` — ${importResult.skipped} already existed and ${importResult.skipped === 1 ? "was" : "were"} left untouched`}
+            . They are live on the pricing page now.
+          </p>
+        )}
       </div>
 
       {/* ---------- existing price list ---------- */}

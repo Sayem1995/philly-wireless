@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { getDb, toDate } from "./firestore.js";
 import { nextId } from "./ids.js";
 import { deleteProductImage } from "./productImages.js";
+import { partitionNewRows } from "../../src/lib/priceImport.js";
 
 /* ==================================================================
  * Firestore-backed data access for the shop + admin routers.
@@ -110,6 +111,17 @@ export function supersededImageId({ previous, next }: ImageChange): string | nul
 export function imageIdForDeletedProduct(existing: { imagePath?: unknown } | undefined): string | null {
   const imagePath = existing?.imagePath;
   return typeof imagePath === "string" && imagePath !== "" ? imagePath : null;
+}
+
+/**
+ * Sort order to continue from.
+ *
+ * Every price row MUST carry a `sortOrder`: `prices()` orders by that field and
+ * Firestore omits documents with no value for an orderBy field, so a row
+ * written without one would exist yet never appear on the site.
+ */
+export function nextSortOrderFor(existing: Array<{ sortOrder?: unknown }>): number {
+  return existing.reduce((max, r) => Math.max(max, Number(r.sortOrder ?? 0)), 0) + 1;
 }
 
 /* ---------- typed rows ---------- */
@@ -417,13 +429,37 @@ export const store = {
     // no value for an orderBy field — so every row MUST carry one, or it would be
     // written successfully yet never appear on the site.
     const existing = await listRows(COLLECTIONS.repairPrices, "sortOrder", "asc");
-    const nextSortOrder =
-      existing.reduce((max, r) => Math.max(max, Number(r.sortOrder ?? 0)), 0) + 1;
+    const nextSortOrder = nextSortOrderFor(existing);
     const row = await createRow(COLLECTIONS.repairPrices, { ...data, sortOrder: nextSortOrder });
     return mapRepairPrice(row);
   },
   async deletePrice(id: number): Promise<void> {
     await deleteRow(COLLECTIONS.repairPrices, id);
+  },
+
+  /**
+   * Append several price rows at once.
+   *
+   * Deliberately additive: it never overwrites an existing row, it skips rows
+   * that already exist (matched on category + brand + service) and it skips
+   * repeats inside the same batch. That makes re-running an import harmless,
+   * which matters because the price list is live and mistakes are public.
+   */
+  async createPrices(data: Array<Omit<RepairPriceRow, "id" | "sortOrder">>): Promise<{
+    created: RepairPriceRow[];
+    skipped: Array<Omit<RepairPriceRow, "id" | "sortOrder">>;
+  }> {
+    const existing = await listRows(COLLECTIONS.repairPrices);
+    const { fresh, duplicates } = partitionNewRows(data, existing.map(mapRepairPrice));
+    if (fresh.length === 0) return { created: [], skipped: duplicates };
+
+    let nextSortOrder = nextSortOrderFor(existing);
+    const created: RepairPriceRow[] = [];
+    for (const row of fresh) {
+      const written = await createRow(COLLECTIONS.repairPrices, { ...row, sortOrder: nextSortOrder++ });
+      created.push(mapRepairPrice(written));
+    }
+    return { created, skipped: duplicates };
   },
 
   // Products
