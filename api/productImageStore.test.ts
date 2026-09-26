@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getProductImage } from "../server/queries/productImages.js";
+import { imageIdForDeletedProduct, supersededImageId } from "../server/queries/store.js";
 
 /**
  * Image id validation.
@@ -66,5 +67,55 @@ describe("getProductImage id validation", () => {
 
   it("returns undefined for a missing document", async () => {
     await expect(getProductImage("img_missing")).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * Reclaiming image bytes.
+ *
+ * The catalogue shares a 1 GiB Firestore quota on the free plan, so replaced
+ * uploads must not accumulate — but deleting an image that is still displayed
+ * would be much worse than leaking one, hence the explicit negative cases.
+ */
+describe("supersededImageId", () => {
+  it("reclaims the previous image when a product is given a new one", () => {
+    expect(supersededImageId({ previous: "img_old", next: "img_new" })).toBe("img_old");
+  });
+
+  it("reclaims the previous image when the image is cleared", () => {
+    expect(supersededImageId({ previous: "img_old", next: null })).toBe("img_old");
+    expect(supersededImageId({ previous: "img_old", next: undefined })).toBe("img_old");
+  });
+
+  it("keeps the image when the save did not change it", () => {
+    expect(supersededImageId({ previous: "img_same", next: "img_same" })).toBeNull();
+  });
+
+  it("does nothing when there was no previous image", () => {
+    expect(supersededImageId({ previous: null, next: "img_new" })).toBeNull();
+    expect(supersededImageId({ previous: undefined, next: "img_new" })).toBeNull();
+    expect(supersededImageId({ previous: "", next: "img_new" })).toBeNull();
+  });
+
+  it("refuses to act on a malformed row", () => {
+    expect(supersededImageId({ previous: 42, next: "img_new" })).toBeNull();
+    expect(supersededImageId({ previous: { id: "x" }, next: "img_new" })).toBeNull();
+  });
+});
+
+describe("imageIdForDeletedProduct", () => {
+  it("returns the image id of the deleted product", () => {
+    expect(imageIdForDeletedProduct({ imagePath: "img_abc" })).toBe("img_abc");
+  });
+
+  it("returns null for a product without an image or a missing row", () => {
+    expect(imageIdForDeletedProduct({ imagePath: null })).toBeNull();
+    expect(imageIdForDeletedProduct({ imagePath: "" })).toBeNull();
+    expect(imageIdForDeletedProduct({})).toBeNull();
+    expect(imageIdForDeletedProduct(undefined)).toBeNull();
+  });
+
+  it("refuses to act on a malformed value", () => {
+    expect(imageIdForDeletedProduct({ imagePath: 7 })).toBeNull();
   });
 });

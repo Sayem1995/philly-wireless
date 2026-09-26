@@ -2,6 +2,7 @@ import type { Query } from "firebase-admin/firestore";
 import { randomBytes } from "node:crypto";
 import { getDb, toDate } from "./firestore.js";
 import { nextId } from "./ids.js";
+import { deleteProductImage } from "./productImages.js";
 
 /* ==================================================================
  * Firestore-backed data access for the shop + admin routers.
@@ -67,6 +68,44 @@ async function updateRow(col: string, id: number, data: Row): Promise<void> {
 
 async function deleteRow(col: string, id: number): Promise<void> {
   await (await getDb()).collection(col).doc(String(id)).delete();
+}
+
+/**
+ * Is any product still pointing at this image?
+ *
+ * Ids are unique per upload, so a shared reference should never happen — but
+ * deleting bytes another product displays would be far worse than leaking a few
+ * hundred kilobytes, so the check is cheap insurance.
+ */
+async function isImageReferenced(imagePath: string): Promise<boolean> {
+  const db = await getDb();
+  const snap = await db
+    .collection(COLLECTIONS.products)
+    .where("imagePath", "==", imagePath)
+    .limit(1)
+    .get();
+  return !snap.empty;
+}
+
+type ImageChange = { previous?: unknown; next?: unknown };
+
+/**
+ * The image id whose bytes became unreachable after a product was saved.
+ *
+ * Returns `null` when nothing may be reclaimed: no previous image, an unchanged
+ * image, or a non-string value (a malformed row is not a licence to delete).
+ * Callers must still confirm the id is unreferenced before deleting.
+ */
+export function supersededImageId({ previous, next }: ImageChange): string | null {
+  if (typeof previous !== "string" || previous === "") return null;
+  if (previous === next) return null;
+  return previous;
+}
+
+/** The image id to consider reclaiming when a product is deleted outright. */
+export function imageIdForDeletedProduct(existing: { imagePath?: unknown } | undefined): string | null {
+  const imagePath = existing?.imagePath;
+  return typeof imagePath === "string" && imagePath !== "" ? imagePath : null;
 }
 
 /* ---------- typed rows ---------- */
@@ -397,13 +436,29 @@ export const store = {
   },
   async upsertProduct(data: Partial<ProductRow>): Promise<void> {
     if (data.id) {
+      const existing = await getRow(COLLECTIONS.products, data.id);
       await updateRow(COLLECTIONS.products, data.id, data);
+
+      // Reclaim superseded image bytes. On the free plan the whole catalogue
+      // shares a 1 GiB quota, so leaving every replaced upload behind would
+      // gradually eat it. Ids are unique per upload, so nothing else can be
+      // pointing at the old document.
+      const superseded = supersededImageId({ previous: existing?.imagePath, next: data.imagePath });
+      if (superseded && !(await isImageReferenced(superseded))) {
+        await deleteProductImage(superseded);
+      }
     } else {
       await createRow(COLLECTIONS.products, data);
     }
   },
   async deleteProduct(id: number): Promise<void> {
+    const existing = await getRow(COLLECTIONS.products, id);
     await deleteRow(COLLECTIONS.products, id);
+
+    const imagePath = imageIdForDeletedProduct(existing);
+    if (imagePath && !(await isImageReferenced(imagePath))) {
+      await deleteProductImage(imagePath);
+    }
   },
 
   // Blog
