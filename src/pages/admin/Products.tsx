@@ -41,6 +41,9 @@ export default function Products() {
   // so the picker can be reset every time the dialog opens.
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Set when the saved image cannot actually be fetched back from Storage, so
+  // a broken image is reported instead of silently rendering as a blank box.
+  const [previewFailed, setPreviewFailed] = useState(false);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   // Derived so the reset effect below has dependencies ESLint can verify.
@@ -51,6 +54,7 @@ export default function Products() {
   useEffect(() => {
     setUploading(false);
     setUploadError(null);
+    setPreviewFailed(false);
     if (fileInput.current) fileInput.current.value = "";
   }, [isFormOpen, editingId]);
 
@@ -62,6 +66,7 @@ export default function Products() {
       return;
     }
     setUploadError(null);
+    setPreviewFailed(false);
     setUploading(true);
     try {
       const { path, bucket: uploadedTo } = await uploadProductImage(form.name.trim() || "product", file);
@@ -140,7 +145,17 @@ export default function Products() {
             <div className="rounded-2xl border border-ink/15 bg-white/60 p-3.5 space-y-2.5">
               <div className="flex items-start gap-3">
                 <div className="w-24 h-24 shrink-0 rounded-xl border border-blush bg-blush-light grid place-items-center overflow-hidden">
-                  {previewUrl ? <img src={previewUrl} alt="Product preview" className="w-full h-full object-cover" /> : <ImagePlus size={22} className="text-ink/25" />}
+                  {previewUrl && !previewFailed ? (
+                    <img
+                      src={previewUrl}
+                      alt="Product preview"
+                      className="w-full h-full object-cover"
+                      onLoad={() => setPreviewFailed(false)}
+                      onError={() => setPreviewFailed(true)}
+                    />
+                  ) : (
+                    <ImagePlus size={22} className="text-ink/25" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0 space-y-2">
                   <p className="text-[13px] font-semibold text-ink">Product image</p>
@@ -167,11 +182,23 @@ export default function Products() {
                 </div>
               </div>
               {uploadError && <p className="text-[12px] text-red-600 leading-relaxed">{uploadError}</p>}
+              {previewFailed && form.imagePath && (
+                <p className="text-[12px] text-red-600 leading-relaxed">
+                  Saved, but the image could not be loaded from Storage — the file may have been removed, or Cloud Storage is not enabled for this project.
+                </p>
+              )}
               {form.imagePath && !uploadError && <p className="text-[11px] text-ink/40 break-all">Stored at <span className="font-mono">{form.imagePath}</span></p>}
             </div>
 
             <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} className="accent-burgundy w-4 h-4" /> Visible on website</label>
-            <button disabled={upsert.isPending} onClick={() => form.name && form.subcategory && upsert.mutate(form)} className="w-full bg-burgundy text-ivory font-semibold py-3 rounded-full hover:bg-burgundy-dark disabled:opacity-50">{upsert.isPending ? "Saving…" : "Save"}</button>
+            {uploading && <p className="text-[12px] text-burgundy text-center">Waiting for the image upload to finish…</p>}
+            <button
+              disabled={upsert.isPending || uploading}
+              onClick={() => form.name && form.subcategory && upsert.mutate(form)}
+              className="w-full bg-burgundy text-ivory font-semibold py-3 rounded-full hover:bg-burgundy-dark disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {upsert.isPending ? "Saving…" : uploading ? "Uploading image…" : "Save"}
+            </button>
           </div>
         </div>
       )}
