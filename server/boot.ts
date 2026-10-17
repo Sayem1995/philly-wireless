@@ -8,6 +8,14 @@ import { env } from "./lib/env.js";
 import { runWithVercelOidcToken, VERCEL_OIDC_HEADER } from "./lib/gcp-oidc.js";
 import { credentialSource, getDb } from "./queries/firestore.js";
 import { getProductImage } from "./queries/productImages.js";
+import { reconcileAbandonedOrders } from "./orderReconciliation.js";
+import { constantTimeEqual } from "./lib/secrets.js";
+import {
+  paymentsConfigured,
+  verifyStripeSignature,
+  webhookConfigured,
+} from "./payments.js";
+import { handleStripeEvent } from "./stripeWebhook.js";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -31,11 +39,25 @@ app.use("*", (c, next) =>
 app.get("/api/health", async (c) => {
   const source = credentialSource();
   const projectId = env.firebaseProjectId || null;
+  // Configuration facts only — never the key, the webhook secret or the cron
+  // secret. The admin panel exposes the Stripe mode separately.
+  const config = {
+    onlineCard: paymentsConfigured(),
+    webhookConfigured: webhookConfigured(),
+    taxPercent: env.orderTaxPercent,
+    publicSiteUrl: env.publicSiteUrl,
+  };
   try {
     const db = await getDb();
     // Cheap round-trip that requires a real credential (not just client construction).
     await db.collection("repairPrices").limit(1).get();
-    return c.json({ ok: true, projectId, credentialSource: source, firestore: "reachable" });
+    return c.json({
+      ok: true,
+      projectId,
+      credentialSource: source,
+      firestore: "reachable",
+      config,
+    });
   } catch (err) {
     return c.json(
       {
@@ -44,6 +66,7 @@ app.get("/api/health", async (c) => {
         credentialSource: source,
         firestore: "unreachable",
         error: err instanceof Error ? err.message : String(err),
+        config,
       },
       503,
     );
@@ -75,6 +98,65 @@ app.get("/api/images/:id", async (c) => {
     console.error("[images] failed to serve image", id, err);
     return c.body(null, 500);
   }
+});
+
+/**
+ * Stripe webhook.
+ *
+ * The return-page verification in `shop.confirmOrderPayment` only runs if the
+ * customer makes it back to the site. This handler is the authoritative path:
+ * Stripe signs every delivery, the signature is checked against the raw body,
+ * and a paid session marks the matching order paid even if the tab was closed.
+ */
+app.post("/api/stripe/webhook", async (c) => {
+  const secret = env.stripeWebhookSecret;
+  if (!secret) {
+    return c.json({ error: "Stripe webhook is not configured." }, 503);
+  }
+
+  const payload = await c.req.text();
+  if (!verifyStripeSignature(payload, c.req.header("stripe-signature") ?? null, secret)) {
+    return c.json({ error: "Invalid Stripe signature." }, 400);
+  }
+
+  let event: unknown;
+  try {
+    event = JSON.parse(payload);
+  } catch {
+    return c.json({ error: "Invalid JSON body." }, 400);
+  }
+  if (!event || typeof event !== "object") {
+    return c.json({ error: "Invalid event." }, 400);
+  }
+
+  // The state machine lives in `stripeWebhook.ts` so it can be tested without
+  // HTTP. It re-checks the order, amount, currency and reference before any
+  // status change, and is idempotent for replayed deliveries.
+  const result = await handleStripeEvent(event);
+  return c.json(result);
+});
+
+/**
+ * Scheduled reconciliation.
+ *
+ * Stripe's `checkout.session.expired` webhook releases abandoned checkouts, but
+ * a missed delivery (or a webhook secret outage) must not hold stock forever.
+ * This endpoint (wired to Vercel Cron) releases reservations whose window has
+ * passed and prunes old idempotency keys. It is disabled unless CRON_SECRET is
+ * configured, and Vercel sends that secret as a Bearer token automatically.
+ */
+app.get("/api/cron/reconcile-orders", async (c) => {
+  if (!env.cronSecret) {
+    return c.json({ error: "Cron reconciliation is not configured." }, 503);
+  }
+  const header = c.req.header("authorization") ?? "";
+  const provided = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (!constantTimeEqual(provided, env.cronSecret)) {
+    return c.json({ error: "Unauthorized." }, 401);
+  }
+
+  const result = await reconcileAbandonedOrders(new Date(), 100);
+  return c.json({ ok: true, ...result });
 });
 
 // Handle tRPC + any other /api routes

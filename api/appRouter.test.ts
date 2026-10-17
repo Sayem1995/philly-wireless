@@ -12,8 +12,13 @@ import type { BookingRow, CustomerRow, PartRow } from "../server/queries/store.j
  * `store` below are the modules wired to the mocks.
  */
 
-vi.mock("../server/queries/store.js", () => ({
-  store: {
+vi.mock("../server/queries/store.js", () => {
+  class StockError extends Error {}
+  class OrderStateError extends Error {}
+  return {
+    StockError,
+    OrderStateError,
+    store: {
     prices: vi.fn(),
     products: vi.fn(),
     blogList: vi.fn(),
@@ -45,8 +50,9 @@ vi.mock("../server/queries/store.js", () => ({
     updateBooking: vi.fn(),
     parts: vi.fn(),
     lowStock: vi.fn(),
-  },
-}));
+    },
+  };
+});
 
 vi.mock("../server/queries/productImages.js", () => ({
   createProductImage: vi.fn(),
@@ -60,6 +66,8 @@ vi.mock("../server/email.js", () => ({
   staffNotificationHtml: vi.fn(() => "<html>staff</html>"),
   receiptHtml: vi.fn(() => "<html>receipt</html>"),
   messageHtml: vi.fn(() => "<html>message</html>"),
+  orderConfirmationHtml: vi.fn(() => "<html>order</html>"),
+  orderStaffNotificationHtml: vi.fn(() => "<html>order-staff</html>"),
   escapeHtml: vi.fn((s: string) => s),
   money: vi.fn((c: number) => `$${(c / 100).toFixed(2)}`),
 }));

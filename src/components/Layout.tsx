@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
-import { Menu, X, Phone, MapPin, Clock, MessageCircle, Facebook, Instagram, Twitter, ArrowUp } from "lucide-react";
+import { Menu, X, Phone, MapPin, Clock, MessageCircle, Facebook, Instagram, Twitter, ArrowUp, ShoppingBag } from "lucide-react";
 import Logo from "./Logo";
+import CartDrawer from "./CartDrawer";
 import { STORE, BRAND } from "@contracts/constants";
 import { compactHours } from "@contracts/brand";
 import { trpc } from "@/providers/trpc";
+import { useCart } from "@/providers/cart";
 import { toast } from "sonner";
 
 const NAV = [
@@ -22,6 +24,7 @@ const NAV = [
 function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { count, openCart } = useCart();
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 24);
     fn();
@@ -45,6 +48,19 @@ function Navbar() {
           <a href={STORE.phoneHref} className="hidden md:flex items-center gap-2 text-sm font-semibold text-burgundy hover:text-burgundy-dark transition-colors">
             <Phone size={16} /> {STORE.phone}
           </a>
+          <button
+            type="button"
+            onClick={openCart}
+            aria-label={count > 0 ? `Open cart, ${count} item${count === 1 ? "" : "s"}` : "Open cart"}
+            className="relative p-2 text-ink/70 hover:text-burgundy transition-colors"
+          >
+            <ShoppingBag size={21} />
+            {count > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-burgundy text-ivory text-[10px] font-semibold grid place-items-center leading-none">
+                {count > 9 ? "9+" : count}
+              </span>
+            )}
+          </button>
           <Link to="/book" className="hidden sm:inline-flex bg-burgundy text-ivory text-sm font-semibold px-6 py-3 rounded-full hover:bg-burgundy-dark hover:-translate-y-0.5 hover:shadow-lg hover:shadow-burgundy/25 transition-all duration-300">
             Book a Repair
           </Link>
@@ -135,6 +151,7 @@ export default function Layout() {
       <Navbar />
       <main><Outlet /></main>
       <Footer />
+      <CartDrawer />
       <a href={`https://wa.me/${BRAND.whatsapp}`} target="_blank" rel="noreferrer" aria-label="Chat with us"
         className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-burgundy text-ivory grid place-items-center shadow-lg shadow-burgundy/30 hover:bg-burgundy-dark hover:-translate-y-1 transition-all duration-300">
         <MessageCircle size={22} />

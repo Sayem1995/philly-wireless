@@ -1,6 +1,15 @@
 import nodemailer from "nodemailer";
 import { STORE, BRAND } from "../contracts/constants.js";
 import { longHours } from "../contracts/brand.js";
+import { maskEmail } from "./lib/mask.js";
+import {
+  formatCents,
+  orderNumber,
+  PAYMENT_METHOD_LABELS,
+  FULFILLMENT_LABELS,
+  type FulfillmentMethod,
+  type PaymentMethod,
+} from "../contracts/orders.js";
 
 /**
  * Brand palette for inline email styles.
@@ -134,7 +143,11 @@ export async function sendEmail(opts: {
   // Fallback: SMTP (Gmail etc.)
   const transport = getTransport();
   if (!transport) {
-    console.log(`[email:not-configured] To: ${opts.to} | Subject: ${opts.subject}`);
+    // Mask the recipient: this log line can end up in a hosting provider's log
+    // store, which is not where customer email addresses belong.
+    console.log(
+      `[email:not-configured] To: ${maskEmail(opts.to)} | Subject: ${opts.subject}`,
+    );
     return { delivered: false };
   }
   await transport.sendMail({
@@ -289,5 +302,109 @@ export function receiptHtml(r: {
     <p style="color:${C.muted};font-size:12px;line-height:1.7;margin:22px 0 0;text-align:center;">
       Keep this for your records — it also covers any warranty claim.
     </p>`,
+  );
+}
+
+/* ---------- online orders ---------- */
+
+type OrderEmailLine = { name: string; qty: number; lineCents: number };
+
+type OrderEmailInput = {
+  id: number;
+  customerName: string;
+  phone: string;
+  email: string | null;
+  fulfillment: FulfillmentMethod;
+  address: string | null;
+  notes: string | null;
+  lines: OrderEmailLine[];
+  subtotalCents: number;
+  taxCents: number;
+  totalCents: number;
+  paymentMethod: PaymentMethod;
+  paymentStatus: string;
+  url?: string | null;
+};
+
+function orderLinesRows(lines: OrderEmailLine[]): string {
+  return lines
+    .map((l) => row(`${escapeHtml(l.name)} × ${l.qty}`, money(l.lineCents)))
+    .join("");
+}
+
+/** Sent when an order is placed for pay-in-store, or when card payment clears. */
+export function orderConfirmationHtml(o: OrderEmailInput) {
+  const paid = o.paymentStatus === "paid";
+  const taxRow = o.taxCents > 0 ? row("Sales tax", money(o.taxCents)) : "";
+  const collection =
+    o.fulfillment === "pickup"
+      ? `<p style="color:${C.muted};font-size:14px;line-height:1.7;margin:20px 0 0;">
+           Pick it up at ${STORE.address}, ${STORE.city}. We'll text ${escapeHtml(o.phone)} as soon as it's ready.
+         </p>`
+      : `<p style="color:${C.muted};font-size:14px;line-height:1.7;margin:20px 0 0;">
+           We'll deliver to ${escapeHtml(o.address ?? "the address you gave us")} and text ${escapeHtml(o.phone)} to arrange a time.
+         </p>`;
+
+  return shell(
+    paid ? "Payment received — order confirmed" : "Your order is in!",
+    `<p style="text-align:center;color:${C.muted};font-size:14px;margin:0 0 20px;">
+      Hi ${escapeHtml(o.customerName.split(" ")[0] || "there")}, thanks for shopping with ${BRAND.name}.
+    </p>
+    <div style="background:#fff;border:1px solid ${C.secondary};border-radius:16px;padding:24px;">
+      <table style="width:100%;border-collapse:collapse;">
+        ${row("Order", `#${orderNumber(o.id)}`)}
+        ${row("Fulfilment", FULFILLMENT_LABELS[o.fulfillment])}
+        ${row("Payment", `${PAYMENT_METHOD_LABELS[o.paymentMethod]} · ${paid ? "paid" : "due at collection"}`)}
+      </table>
+      <div style="border-top:1px solid ${C.secondary};margin:18px 0;"></div>
+      <table style="width:100%;border-collapse:collapse;">
+        ${orderLinesRows(o.lines)}
+        ${taxRow}
+      </table>
+      <div style="border-top:2px solid ${C.secondary};margin:18px 0;"></div>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td style="font-size:16px;color:${C.ink};font-weight:bold;">${paid ? "Total paid" : "Total due"}</td>
+          <td style="text-align:right;font-size:20px;color:${C.primary};font-weight:bold;">${formatCents(o.totalCents)}</td>
+        </tr>
+      </table>
+    </div>
+    ${collection}
+    ${o.notes ? `<p style="color:${C.muted};font-size:13px;margin:14px 0 0;">Note: ${escapeHtml(o.notes)}</p>` : ""}
+    ${o.url ? `<p style="text-align:center;margin:22px 0 0;"><a href="${o.url}" style="background:${C.primary};color:${C.surface};text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;">View your order</a></p>` : ""}
+    <p style="color:${C.muted};font-size:12px;line-height:1.7;margin:22px 0 0;text-align:center;">
+      Questions? Call ${STORE.phone} — or just reply to this email.
+    </p>`,
+  );
+}
+
+/** Staff alert for a new order, so the shop can pull the stock and ring it up. */
+export function orderStaffNotificationHtml(o: OrderEmailInput) {
+  return shell(
+    `New online order — #${orderNumber(o.id)}`,
+    `<div style="background:#fff;border:1px solid ${C.secondary};border-radius:16px;padding:24px;">
+      <table style="width:100%;border-collapse:collapse;">
+        ${row("Customer", escapeHtml(o.customerName))}
+        ${row("Phone", escapeHtml(o.phone))}
+        ${row("Email", o.email ? escapeHtml(o.email) : "—")}
+        ${row("Fulfilment", FULFILLMENT_LABELS[o.fulfillment])}
+        ${o.address ? row("Address", escapeHtml(o.address)) : ""}
+        ${row("Payment", PAYMENT_METHOD_LABELS[o.paymentMethod])}
+        ${row("Payment status", o.paymentStatus)}
+      </table>
+      <div style="border-top:1px solid ${C.secondary};margin:18px 0;"></div>
+      <table style="width:100%;border-collapse:collapse;">
+        ${orderLinesRows(o.lines)}
+        ${o.taxCents > 0 ? row("Sales tax", money(o.taxCents)) : ""}
+      </table>
+      <div style="border-top:2px solid ${C.secondary};margin:18px 0;"></div>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td style="font-size:16px;color:${C.ink};font-weight:bold;">Order total</td>
+          <td style="text-align:right;font-size:20px;color:${C.primary};font-weight:bold;">${formatCents(o.totalCents)}</td>
+        </tr>
+      </table>
+    </div>
+    ${o.notes ? `<p style="color:${C.muted};font-size:13px;margin:14px 0 0;">Note: ${escapeHtml(o.notes)}</p>` : ""}`,
   );
 }

@@ -6,6 +6,9 @@ import Pricing from "./pages/Pricing"
 import Devices from "./pages/Devices"
 import Accessories from "./pages/Accessories"
 import Booking from "./pages/Booking"
+import Cart from "./pages/Cart"
+import Checkout from "./pages/Checkout"
+import OrderConfirmation from "./pages/OrderConfirmation"
 import About from "./pages/About"
 import Contact from "./pages/Contact"
 import Faq from "./pages/Faq"
@@ -17,6 +20,7 @@ import NotFound from "./pages/NotFound"
 import AdminLayout from "./pages/admin/AdminLayout"
 import Dashboard from "./pages/admin/Dashboard"
 import AdminBookings from "./pages/admin/Bookings"
+import AdminOrders from "./pages/admin/Orders"
 import AdminCustomers from "./pages/admin/Customers"
 import AdminInventory from "./pages/admin/Inventory"
 import AdminProducts from "./pages/admin/Products"
@@ -33,6 +37,9 @@ export default function App() {
         <Route path="/devices" element={<Devices />} />
         <Route path="/accessories" element={<Accessories />} />
         <Route path="/book" element={<Booking />} />
+        <Route path="/cart" element={<Cart />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/order/:token" element={<OrderConfirmation />} />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/faq" element={<Faq />} />
@@ -45,6 +52,7 @@ export default function App() {
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="bookings" element={<AdminBookings />} />
+        <Route path="orders" element={<AdminOrders />} />
         <Route path="customers" element={<AdminCustomers />} />
         <Route path="inventory" element={<AdminInventory />} />
         <Route path="products" element={<AdminProducts />} />

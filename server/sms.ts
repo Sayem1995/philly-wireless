@@ -1,3 +1,6 @@
+import { env } from "./lib/env.js";
+import { maskPhone } from "./lib/mask.js";
+
 /**
  * SMS sender (Twilio REST API).
  *
@@ -45,8 +48,12 @@ export async function sendSms(opts: { to: string; body: string }): Promise<{ del
   const to = toE164(opts.to);
 
   if (!config || !to) {
+    // Mask the number, and keep the message body out of production logs (it
+    // can contain a customer name and repair details).
     console.log(
-      `[sms:not-configured] To: ${opts.to}${to ? ` (${to})` : " (unparseable)"} | ${opts.body}`,
+      `[sms:not-configured] To: ${maskPhone(opts.to)}${to ? "" : " (unparseable)"}${
+        env.isProduction ? "" : ` | ${opts.body}`
+      }`,
     );
     return { delivered: false };
   }

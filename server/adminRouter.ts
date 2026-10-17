@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createRouter, adminQuery } from "./middleware.js";
-import { store } from "./queries/store.js";
+import { OrderStateError, store } from "./queries/store.js";
 import { createProductImage } from "./queries/productImages.js";
 import { sendEmail, receiptHtml, messageHtml } from "./email.js";
 import { sendSms } from "./sms.js";
@@ -9,9 +9,26 @@ import { env } from "./lib/env.js";
 import { STORE } from "../contracts/constants.js";
 import { IMAGE_MAX_DATA_CHARS, normalizeImageMime } from "../contracts/productImages.js";
 import {
+  ORDER_CURRENCY,
+  ORDER_STATUSES,
+  PAYMENT_METHODS,
+  PAYMENT_STATUSES,
+  canTransitionOrderStatus,
+  canTransitionPaymentStatus,
+  orderNumber,
+} from "../contracts/orders.js";
+import {
+  paymentsConfigured,
+  refundStripePayment,
+  stripeMode,
+  webhookConfigured,
+} from "./payments.js";
+import {
   notifyCustomer,
   type CustomerNotificationKind,
 } from "./notifications.js";
+import { reconcileAbandonedOrders } from "./orderReconciliation.js";
+import { sendOrderEmails } from "./orderEmails.js";
 
 /** Status changes worth telling the customer about. "pending" is the default. */
 const CUSTOMER_NOTIFIABLE_STATUSES = [
@@ -249,6 +266,279 @@ export const adminRouter = createRouter({
       return { ok: true };
     }),
 
+  /* ---------- online shop orders ---------- */
+  orders: adminQuery.query(async () => {
+    return store.orders();
+  }),
+
+  /** Non-secret payment configuration for the admin UI (test-mode banner). */
+  paymentConfig: adminQuery.query(() => {
+    return {
+      onlineCard: paymentsConfigured(),
+      stripeMode: stripeMode(), // "disabled" | "invalid" | "test" | "live"
+      webhookConfigured: webhookConfigured(),
+      publicSiteUrl: env.publicSiteUrl,
+      // Stripe redirects and customer links must point at the real HTTPS site.
+      publicSiteUrlIsHttps: /^https:\/\/[^/]+/i.test(env.publicSiteUrl),
+      taxPercent: env.orderTaxPercent,
+      reservationMinutes: env.orderReservationMinutes,
+      cronConfigured: Boolean(env.cronSecret),
+    };
+  }),
+
+  /**
+   * Update an order.
+   *
+   * Financial and stock-bearing transitions are deliberately narrow:
+   *  - cancellation goes through `cancelOrder`, which refuses paid orders and
+   *    restocks exactly once inside a transaction;
+   *  - `unpaid → paid` is a staff-recorded collection;
+   *  - `paid → refunded` is refused here and must use `refundOrder`, which asks
+   *    Stripe first for card-online payments.
+   */
+  updateOrder: adminQuery
+    .input(
+      z.object({
+        id: z.number(),
+        status: z.enum(ORDER_STATUSES).optional(),
+        paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
+        paymentMethod: z.enum(PAYMENT_METHODS).optional(),
+        staffNotes: z.string().max(600).optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const existing = await store.orderById(input.id);
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+      }
+
+      if (input.status && !canTransitionOrderStatus(existing.status, input.status)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot change a ${existing.status} order to ${input.status}.`,
+        });
+      }
+      if (
+        input.paymentStatus &&
+        !canTransitionPaymentStatus(existing.paymentStatus, input.paymentStatus)
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot change payment from ${existing.paymentStatus} to ${input.paymentStatus}.`,
+        });
+      }
+      if (input.paymentStatus === "refunded") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Use the refund action so Stripe confirms the refund before it is recorded.",
+        });
+      }
+      if (input.paymentStatus === "paid" && existing.status === "cancelled") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "A cancelled order cannot be marked paid — place a new order or record a late capture through reconciliation.",
+        });
+      }
+
+      // Cancellation is stock-bearing and must be atomic.
+      if (input.status === "cancelled") {
+        if (existing.paymentStatus === "paid") {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Refund this payment before cancelling the order.",
+          });
+        }
+        if (input.paymentStatus && input.paymentStatus !== existing.paymentStatus) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Record the payment separately — a cancellation cannot change the payment status.",
+          });
+        }
+        try {
+          const result = await store.cancelOrder(input.id, "cancelled_by_staff");
+          const patch: Record<string, unknown> = {};
+          if (input.paymentMethod) patch.paymentMethod = input.paymentMethod;
+          if (input.staffNotes !== undefined) {
+            patch.staffNotes = input.staffNotes.trim() || null;
+          }
+          if (Object.keys(patch).length > 0) {
+            await store.updateOrder(input.id, patch as never);
+          }
+          return {
+            ok: true,
+            changed: result.changed,
+            restocked: result.restocked,
+          };
+        } catch (err) {
+          if (err instanceof OrderStateError) {
+            throw new TRPCError({ code: "PRECONDITION_FAILED", message: err.message });
+          }
+          throw err;
+        }
+      }
+
+      const patch: Record<string, unknown> = {};
+      if (input.status) {
+        patch.status = input.status;
+        // A completed order has left the shop floor; it no longer needs a
+        // reservation and must not clutter the abandoned-checkout query.
+        if (input.status === "completed") patch.reservationExpiresAt = null;
+      }
+      if (input.paymentMethod) patch.paymentMethod = input.paymentMethod;
+      // Staff notes only: the customer's own checkout note (`notes`) is shown
+      // on their order page and must never be overwritten by internal remarks.
+      if (input.staffNotes !== undefined) {
+        patch.staffNotes = input.staffNotes.trim() || null;
+      }
+
+      if (input.paymentStatus === "paid") {
+        try {
+          const result = await store.markOrderPaid(input.id, {
+            paidAt: existing.paidAt ?? new Date().toISOString().slice(0, 10),
+          });
+          // A manual collection deserves the same confirmation the webhook
+          // sends. Only the first transition emails, so re-saving is quiet.
+          if (result.changed) {
+            await sendOrderEmails(result.order, { customer: true, staff: false });
+          }
+        } catch (err) {
+          if (err instanceof OrderStateError) {
+            throw new TRPCError({ code: "CONFLICT", message: err.message });
+          }
+          throw err;
+        }
+      }
+
+      if (Object.keys(patch).length > 0) {
+        await store.updateOrder(input.id, patch as never);
+      }
+      return { ok: true };
+    }),
+
+  /**
+   * Refund a paid order.
+   *
+   * Card-online payments are refunded through Stripe with an idempotency key;
+   * the order is only marked refunded once Stripe reports `succeeded`. Offline
+   * payments (cash, card terminal, Zelle) are recorded after staff refund them
+   * — Stripe is not involved, and the UI confirms that explicitly.
+   */
+  refundOrder: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const order = await store.orderById(input.id);
+      if (!order) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Order not found." });
+      }
+      if (order.paymentStatus === "refunded") {
+        return { ok: true, changed: false, restocked: false, alreadyRefunded: true };
+      }
+      if (order.paymentStatus !== "paid") {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Only a paid order can be refunded.",
+        });
+      }
+
+      let refundId: string | null = null;
+      if (order.paymentMethod === "card_online") {
+        if (!paymentsConfigured()) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "Stripe is not configured, so this card payment cannot be refunded here. Refund it in the Stripe dashboard and record the order manually.",
+          });
+        }
+        if (!order.paymentIntentId) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message:
+              "This order has no Stripe payment reference (it predates refund support). Refund it in the Stripe dashboard — it cannot be recorded automatically.",
+          });
+        }
+
+        let refund;
+        try {
+          refund = await refundStripePayment({
+            paymentIntentId: order.paymentIntentId,
+            amountCents: order.totalCents,
+            idempotencyKey: `refund-order-${order.id}`,
+            orderNumber: orderNumber(order.id),
+          });
+        } catch (err) {
+          console.error("[orders] Stripe refund failed:", err);
+          throw new TRPCError({
+            code: "BAD_GATEWAY",
+            message:
+              "Stripe could not confirm the refund. Nothing has been recorded — check Stripe and try again.",
+          });
+        }
+        if (refund.status !== "succeeded") {
+          throw new TRPCError({
+            code: "BAD_GATEWAY",
+            message: `Stripe reports the refund as “${refund.status || "unknown"}”. It has not been recorded; check Stripe before retrying.`,
+          });
+        }
+        if (refund.amount === null || refund.amount !== order.totalCents) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              "Stripe did not report the expected refunded amount. Check Stripe — the order was not marked refunded.",
+          });
+        }
+        if (refund.currency && refund.currency !== ORDER_CURRENCY) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              "Stripe refunded a different currency. Check Stripe — the order was not marked refunded.",
+          });
+        }
+        refundId = refund.id;
+      }
+
+      try {
+        const result = await store.markOrderRefunded(input.id, {
+          refundId,
+          reason: "refunded",
+        });
+        return {
+          ok: true,
+          changed: result.changed,
+          restocked: result.restocked,
+          alreadyRefunded: !result.changed,
+        };
+      } catch (err) {
+        if (err instanceof OrderStateError) {
+          throw new TRPCError({ code: "CONFLICT", message: err.message });
+        }
+        throw err;
+      }
+    }),
+
+  /** Delete an unpaid/refunded order, restocking only if stock is still held. */
+  deleteOrder: adminQuery
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      try {
+        const result = await store.deleteOrderSafely(input.id);
+        return { ok: true, ...result };
+      } catch (err) {
+        if (err instanceof OrderStateError) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: err.message });
+        }
+        throw err;
+      }
+    }),
+
+  /** Manual trigger for the same reconciliation Vercel Cron runs. */
+  reconcileOrders: adminQuery.mutation(async () => {
+    const result = await reconcileAbandonedOrders(new Date(), 100);
+    return { ok: true, ...result };
+  }),
+
   /* ---------- notifications ---------- */
   notify: adminQuery
     .input(
@@ -433,8 +723,10 @@ export const adminRouter = createRouter({
         name: z.string().min(1),
         kind: z.enum(["device_new", "device_refurb", "accessory"]),
         subcategory: z.string().min(1),
-        price: z.number().min(0),
-        stock: z.number().min(0),
+        // Cents and whole units: non-integer values would leak floating-point
+        // rounding into totals and Stripe's integer `unit_amount`.
+        price: z.number().int().min(0).max(100_000_000),
+        stock: z.number().int().min(0).max(1_000_000),
         description: z.string().optional(),
         badge: z.string().optional(),
         // Id of a `productImages` document, as returned by `admin.uploadImage`.
@@ -513,7 +805,7 @@ export const adminRouter = createRouter({
         name: z.string().min(1),
         sku: z.string().min(1),
         category: z.string().min(1),
-        stock: z.number().min(0),
+        stock: z.number().int().min(0),
         lowStockAt: z.number().min(0),
         costCents: z.number().min(0),
       }),

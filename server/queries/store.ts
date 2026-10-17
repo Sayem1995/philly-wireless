@@ -1,9 +1,23 @@
-import type { Query } from "firebase-admin/firestore";
-import { randomBytes } from "node:crypto";
+import type { Query, Transaction } from "firebase-admin/firestore";
 import { getDb, toDate } from "./firestore.js";
+import { newCapabilityToken } from "../lib/tokens.js";
+import { planReservation, type StockItem } from "../lib/stock.js";
+
+export type { StockItem } from "../lib/stock.js";
 import { nextId } from "./ids.js";
 import { deleteProductImage } from "./productImages.js";
 import { partitionNewRows } from "../../src/lib/priceImport.js";
+import {
+  isFulfillmentMethod,
+  isOrderStatus,
+  isPaymentMethod,
+  isPaymentStatus,
+  shouldRestock,
+  type FulfillmentMethod,
+  type OrderStatus,
+  type PaymentMethod,
+  type PaymentStatus,
+} from "../../contracts/orders.js";
 
 /* ==================================================================
  * Firestore-backed data access for the shop + admin routers.
@@ -22,6 +36,10 @@ export const COLLECTIONS = {
   notifications: "notifications",
   parts: "parts",
   receipts: "receipts",
+  orders: "orders",
+  /** One doc per checkout idempotency key; written in the same transaction as
+   *  the order so a retried request cannot create (or reserve) twice. */
+  orderIdempotency: "orderIdempotency",
 } as const;
 
 type Row = Record<string, unknown>;
@@ -236,6 +254,62 @@ export type PartRow = {
 
 export type ReceiptLine = { description: string; amountCents: number };
 
+export type OrderItemRow = {
+  productId: number;
+  /** Name and price are snapshotted: a later catalogue edit must not rewrite
+   *  the history of an order the customer already placed. */
+  name: string;
+  unitCents: number;
+  qty: number;
+  lineCents: number;
+};
+
+export type OrderRow = {
+  id: number;
+  /** Random capability token for the customer's confirmation view. */
+  token: string;
+  customerName: string;
+  phone: string;
+  email: string | null;
+  fulfillment: FulfillmentMethod;
+  address: string | null;
+  /** Customer-supplied note (pickup instructions, preferences). */
+  notes: string | null;
+  /** Staff-only note. Never projected to the public order lookup. */
+  staffNotes: string | null;
+  items: OrderItemRow[];
+  subtotalCents: number;
+  taxCents: number;
+  totalCents: number;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  status: OrderStatus;
+  /** Stripe Checkout session, kept so a return/webhook can be re-verified. */
+  stripeSessionId: string | null;
+  /** Stripe PaymentIntent, required to issue a refund through Stripe. */
+  paymentIntentId: string | null;
+  refundId: string | null;
+  paidAt: string | null;
+  /** Client-generated key that makes retried checkouts idempotent. */
+  idempotencyKey: string | null;
+  /**
+   * When the reserved stock stops being held for an unpaid card order
+   * (ISO). Null for pay-in-store orders, which staff resolve manually.
+   */
+  reservationExpiresAt: string | null;
+  /** ISO timestamp set the first time reserved stock was returned. */
+  stockRestoredAt: string | null;
+  /** Why staff (or the expiry sweep) cancelled the order. */
+  cancelledReason: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/** Reserved for customer-facing stock conflicts; routers turn this into a 409. */
+export class StockError extends Error {}
+/** A lifecycle transition the server refuses (e.g. cancelling a paid order). */
+export class OrderStateError extends Error {}
+
 export type ReceiptRow = {
   id: number;
   /** Random capability token used for the customer's public view link. */
@@ -408,6 +482,86 @@ function mapReceipt(r: Row): ReceiptRow {
   };
 }
 
+function mapOrder(r: Row): OrderRow {
+  const rawItems = Array.isArray(r.items) ? (r.items as Row[]) : [];
+  return {
+    id: Number(r.id),
+    token: String(r.token ?? ""),
+    customerName: String(r.customerName ?? ""),
+    phone: String(r.phone ?? ""),
+    email: r.email == null ? null : String(r.email),
+    fulfillment: isFulfillmentMethod(r.fulfillment) ? r.fulfillment : "pickup",
+    address: r.address == null ? null : String(r.address),
+    notes: r.notes == null ? null : String(r.notes),
+    staffNotes: r.staffNotes == null ? null : String(r.staffNotes),
+    items: rawItems
+      .map((l) => ({
+        productId: Number(l.productId ?? 0),
+        name: String(l.name ?? ""),
+        unitCents: Number(l.unitCents ?? 0),
+        qty: Number(l.qty ?? 0),
+        lineCents: Number(l.lineCents ?? 0),
+      }))
+      .filter((l) => l.productId > 0 && l.qty > 0),
+    subtotalCents: Number(r.subtotalCents ?? 0),
+    taxCents: Number(r.taxCents ?? 0),
+    totalCents: Number(r.totalCents ?? 0),
+    paymentMethod: isPaymentMethod(r.paymentMethod) ? r.paymentMethod : "card_in_store",
+    paymentStatus: isPaymentStatus(r.paymentStatus) ? r.paymentStatus : "unpaid",
+    status: isOrderStatus(r.status) ? r.status : "new",
+    stripeSessionId: r.stripeSessionId == null ? null : String(r.stripeSessionId),
+    paymentIntentId: r.paymentIntentId == null ? null : String(r.paymentIntentId),
+    refundId: r.refundId == null ? null : String(r.refundId),
+    paidAt: r.paidAt == null ? null : String(r.paidAt),
+    idempotencyKey: r.idempotencyKey == null ? null : String(r.idempotencyKey),
+    reservationExpiresAt:
+      r.reservationExpiresAt == null ? null : String(r.reservationExpiresAt),
+    stockRestoredAt: r.stockRestoredAt == null ? null : String(r.stockRestoredAt),
+    cancelledReason: r.cancelledReason == null ? null : String(r.cancelledReason),
+    createdAt: toDate(r.createdAt) ?? new Date(),
+    updatedAt: toDate(r.updatedAt) ?? new Date(),
+  };
+}
+
+/* ---------- order transaction helpers ---------- */
+
+type Db = Awaited<ReturnType<typeof getDb>>;
+
+/**
+ * Return stock inside an existing transaction.
+ *
+ * Must be called before any write in that transaction (Firestore requires all
+ * reads first). Deleting or cancelling an order and restoring its stock then
+ * commit atomically — there is no window in which the order is gone but the
+ * stock is still withheld, or vice versa.
+ */
+async function restockInTransaction(
+  tx: Transaction,
+  db: Db,
+  items: StockItem[],
+): Promise<void> {
+  if (items.length === 0) return;
+  const refs = items.map((i) =>
+    db.collection(COLLECTIONS.products).doc(String(i.productId)),
+  );
+  const snaps = await tx.getAll(...refs);
+  snaps.forEach((snap, i) => {
+    if (!snap.exists) return;
+    const raw = Number((snap.data() as Row | undefined)?.stock ?? 0);
+    const current = Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+    tx.update(refs[i], {
+      // Non-finite/negative legacy values are treated as zero; a normal
+      // restock adds the reserved quantity back exactly once.
+      stock: current + items[i].qty,
+      updatedAt: new Date(),
+    });
+  });
+}
+
+function orderFromSnapshot(id: number, data: Row | undefined): OrderRow {
+  return mapOrder({ id, ...(data ?? {}) });
+}
+
 /* ---------- public accessors ---------- */
 
 export const store = {
@@ -499,6 +653,18 @@ export const store = {
     if (imagePath && !(await isImageReferenced(imagePath))) {
       await deleteProductImage(imagePath);
     }
+  },
+
+  /** Products by id, including inactive ones (the caller decides what to reject). */
+  async getProductsByIds(ids: number[]): Promise<ProductRow[]> {
+    const unique = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+    if (unique.length === 0) return [];
+    const db = await getDb();
+    const refs = unique.map((id) => db.collection(COLLECTIONS.products).doc(String(id)));
+    const snaps = await db.getAll(...refs);
+    return snaps
+      .filter((snap) => snap.exists)
+      .map((snap) => mapProduct({ id: Number(snap.id), ...(snap.data() as Row) }));
   },
 
   // Blog
@@ -647,7 +813,7 @@ export const store = {
   ): Promise<ReceiptRow> {
     // Capability token: anyone holding the link can view that one receipt, so
     // it must be unguessable rather than a sequential id.
-    const token = randomBytes(24).toString("base64url");
+    const token = newCapabilityToken();
     const row = await createRow(COLLECTIONS.receipts, { ...data, token });
     return mapReceipt(row);
   },
@@ -668,5 +834,340 @@ export const store = {
   },
   async deleteReceipt(id: number): Promise<void> {
     await deleteRow(COLLECTIONS.receipts, id);
+  },
+
+  // Online orders
+  async orders(): Promise<OrderRow[]> {
+    const rows = await listRows(COLLECTIONS.orders);
+    return rows
+      .map(mapOrder)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  },
+  async orderByToken(token: string): Promise<OrderRow | undefined> {
+    if (!token) return undefined;
+    const rows = await queryWhere(COLLECTIONS.orders, "token", token);
+    return rows.length ? mapOrder(rows[0]) : undefined;
+  },
+  async orderById(id: number): Promise<OrderRow | undefined> {
+    const row = await getRow(COLLECTIONS.orders, id);
+    return row ? mapOrder(row) : undefined;
+  },
+  async orderByIdempotencyKey(key: string): Promise<OrderRow | undefined> {
+    if (!key) return undefined;
+    const db = await getDb();
+    const snap = await db.collection(COLLECTIONS.orderIdempotency).doc(key).get();
+    if (!snap.exists) return undefined;
+    const orderId = Number(snap.data()?.orderId ?? 0);
+    if (!Number.isInteger(orderId) || orderId <= 0) return undefined;
+    const row = await getRow(COLLECTIONS.orders, orderId);
+    return row ? mapOrder(row) : undefined;
+  },
+
+  /**
+   * Create an order and take its stock off the shelf in ONE transaction.
+   *
+   * Previously the reservation and the order write were separate calls; a
+   * crash between them held stock for an order that never existed. Now a
+   * shortage, a Firestore error or a duplicate idempotency key leaves both
+   * collections untouched.
+   */
+  async createOrderWithReservation(
+    data: Omit<OrderRow, "id" | "createdAt" | "updatedAt" | "token">,
+    stockItems: StockItem[],
+  ): Promise<{ order: OrderRow; duplicate: boolean }> {
+    const db = await getDb();
+    // The numeric id is allocated before the transaction because the counter
+    // uses its own transaction (Firestore forbids nested transactions). A
+    // rolled-back attempt leaves a harmless gap in the sequence.
+    const id = await nextId(db, COLLECTIONS.orders);
+    // Capability token: the confirmation page is public and reachable only with
+    // the unguessable link we hand the customer, exactly like receipts.
+    const token = newCapabilityToken();
+    const now = new Date();
+    const row: Row = { ...data, id, token, createdAt: now, updatedAt: now };
+    const orderRef = db.collection(COLLECTIONS.orders).doc(String(id));
+    const idemKey = data.idempotencyKey;
+    const idemRef = idemKey
+      ? db.collection(COLLECTIONS.orderIdempotency).doc(idemKey)
+      : null;
+
+    return db.runTransaction(async (tx) => {
+      // Every read happens before the first write, as Firestore requires.
+      if (idemRef) {
+        const idemSnap = await tx.get(idemRef);
+        if (idemSnap.exists) {
+          const existingId = Number(idemSnap.data()?.orderId ?? 0);
+          if (Number.isInteger(existingId) && existingId > 0) {
+            const existingSnap = await tx.get(
+              db.collection(COLLECTIONS.orders).doc(String(existingId)),
+            );
+            if (existingSnap.exists) {
+              return {
+                order: orderFromSnapshot(existingId, existingSnap.data() as Row),
+                duplicate: true,
+              };
+            }
+          }
+          // Stale key pointing at a deleted order: the `tx.set(idemRef, …)`
+          // below replaces it with this attempt's pointer.
+        }
+      }
+
+      const refs = stockItems.map((i) =>
+        db.collection(COLLECTIONS.products).doc(String(i.productId)),
+      );
+      const snaps = await tx.getAll(...refs);
+      const plan = planReservation(
+        stockItems,
+        snaps.map((snap) => {
+          if (!snap.exists) return { exists: false };
+          const product = mapProduct({
+            id: Number(snap.id),
+            ...(snap.data() as Row),
+          });
+          return {
+            exists: true,
+            name: product.name,
+            stock: product.stock,
+            active: product.active,
+          };
+        }),
+      );
+
+      if (!plan.ok) throw new StockError(plan.reason);
+
+      tx.set(orderRef, row);
+      if (idemRef) {
+        tx.set(idemRef, { orderId: id, token, createdAt: now });
+      }
+      plan.nextStock.forEach((entry, index) => {
+        tx.update(refs[index], { stock: entry.stock, updatedAt: now });
+      });
+      return { order: orderFromSnapshot(id, row), duplicate: false };
+    });
+  },
+
+  /**
+   * Cancel an unpaid order and return its stock exactly once.
+   *
+   * The status read, the stock increment and the status write share one
+   * transaction, so two admins (or an admin and the expiry sweep) cannot both
+   * restock the same order. Paid orders are refused: they must be refunded.
+   */
+  async cancelOrder(
+    id: number,
+    reason = "cancelled_by_staff",
+  ): Promise<{ order: OrderRow; changed: boolean; restocked: boolean }> {
+    const db = await getDb();
+    const ref = db.collection(COLLECTIONS.orders).doc(String(id));
+
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new Error("Order not found.");
+      const order = orderFromSnapshot(id, snap.data() as Row);
+      if (order.status === "cancelled") {
+        return { order, changed: false, restocked: false };
+      }
+      if (order.paymentStatus === "paid") {
+        throw new OrderStateError(
+          "A paid order must be refunded before it can be cancelled.",
+        );
+      }
+
+      const restock = shouldRestock(order.status) && !order.stockRestoredAt;
+      if (restock) await restockInTransaction(tx, db, order.items);
+
+      const now = new Date();
+      const stockRestoredAt = restock ? now.toISOString() : order.stockRestoredAt;
+      const patch = {
+        status: "cancelled" as const,
+        cancelledReason: reason,
+        stockRestoredAt,
+        // Leaving the expiry set would keep this cancelled order in the
+        // reconciliation query forever and could starve live candidates.
+        reservationExpiresAt: null,
+        updatedAt: now,
+      };
+      tx.update(ref, patch);
+      return {
+        order: orderFromSnapshot(id, { ...(snap.data() as Row), ...patch }),
+        changed: true,
+        restocked: restock,
+      };
+    });
+  },
+
+  /**
+   * Mark an order paid. Idempotent: a replayed webhook or a second success-page
+   * verification returns `changed: false` and sends no second email.
+   */
+  async markOrderPaid(
+    id: number,
+    input: {
+      paidAt: string;
+      stripeSessionId?: string | null;
+      paymentIntentId?: string | null;
+    },
+  ): Promise<{ order: OrderRow; changed: boolean }> {
+    const db = await getDb();
+    const ref = db.collection(COLLECTIONS.orders).doc(String(id));
+
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new Error("Order not found.");
+      const order = orderFromSnapshot(id, snap.data() as Row);
+      if (order.paymentStatus === "paid") {
+        return { order, changed: false };
+      }
+      if (order.paymentStatus === "refunded") {
+        throw new OrderStateError("A refunded order cannot be marked paid.");
+      }
+
+      const now = new Date();
+      const patch = {
+        paymentStatus: "paid" as const,
+        paidAt: input.paidAt,
+        stripeSessionId: input.stripeSessionId ?? order.stripeSessionId,
+        paymentIntentId: input.paymentIntentId ?? order.paymentIntentId,
+        // A paid order no longer needs a stock hold and must drop out of the
+        // abandoned-checkout query.
+        reservationExpiresAt: null,
+        updatedAt: now,
+      };
+      tx.update(ref, patch);
+      return {
+        order: orderFromSnapshot(id, { ...(snap.data() as Row), ...patch }),
+        changed: true,
+      };
+    });
+  },
+
+  /**
+   * Record a completed refund. Called only after Stripe has confirmed it (for
+   * card-online orders) or after staff have refunded an offline payment.
+   * Restocks only orders whose goods were still on hold.
+   */
+  async markOrderRefunded(
+    id: number,
+    input: { refundId: string | null; reason?: string },
+  ): Promise<{ order: OrderRow; changed: boolean; restocked: boolean }> {
+    const db = await getDb();
+    const ref = db.collection(COLLECTIONS.orders).doc(String(id));
+
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new Error("Order not found.");
+      const order = orderFromSnapshot(id, snap.data() as Row);
+      if (order.paymentStatus === "refunded") {
+        return { order, changed: false, restocked: false };
+      }
+      if (order.paymentStatus !== "paid") {
+        throw new OrderStateError("Only a paid order can be refunded.");
+      }
+
+      const restock = shouldRestock(order.status) && !order.stockRestoredAt;
+      if (restock) await restockInTransaction(tx, db, order.items);
+
+      const now = new Date();
+      const nextStatus = shouldRestock(order.status) ? "cancelled" : order.status;
+      const patch = {
+        paymentStatus: "refunded" as const,
+        refundId: input.refundId,
+        status: nextStatus,
+        cancelledReason:
+          nextStatus === "cancelled"
+            ? (input.reason ?? "refunded")
+            : order.cancelledReason,
+        stockRestoredAt: restock ? now.toISOString() : order.stockRestoredAt,
+        reservationExpiresAt: null,
+        updatedAt: now,
+      };
+      tx.update(ref, patch);
+      return {
+        order: orderFromSnapshot(id, { ...(snap.data() as Row), ...patch }),
+        changed: true,
+        restocked: restock,
+      };
+    });
+  },
+
+  /**
+   * Delete an order safely: paid orders are refused, stock is returned only
+   * once and only if it was still held, and the idempotency key is cleared so
+   * the same key cannot resurrect a deleted order.
+   */
+  async deleteOrderSafely(
+    id: number,
+  ): Promise<{ deleted: boolean; restocked: boolean }> {
+    const db = await getDb();
+    const ref = db.collection(COLLECTIONS.orders).doc(String(id));
+
+    return db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return { deleted: false, restocked: false };
+      const order = orderFromSnapshot(id, snap.data() as Row);
+      if (order.paymentStatus === "paid") {
+        throw new OrderStateError("Refund paid orders before deleting them.");
+      }
+
+      const restock = shouldRestock(order.status) && !order.stockRestoredAt;
+      if (restock) await restockInTransaction(tx, db, order.items);
+
+      tx.delete(ref);
+      if (order.idempotencyKey) {
+        tx.delete(
+          db.collection(COLLECTIONS.orderIdempotency).doc(order.idempotencyKey),
+        );
+      }
+      return { deleted: true, restocked: restock };
+    });
+  },
+
+  /**
+   * Unpaid card orders whose reservation window has passed.
+   *
+   * Only the query lives here; the caller must re-check Stripe before deciding
+   * whether to release stock, because a delayed webhook could mean the payment
+   * was captured before the reservation elapsed. See `orderReconciliation.ts`.
+   *
+   * Filtering in code (rather than a composite `where`) keeps this on a
+   * single-field index that Firestore creates automatically.
+   */
+  async staleCardOrders(now = new Date(), limit = 100): Promise<OrderRow[]> {
+    const db = await getDb();
+    const snap = await db
+      .collection(COLLECTIONS.orders)
+      .where("reservationExpiresAt", "<=", now.toISOString())
+      .orderBy("reservationExpiresAt", "asc")
+      .limit(limit)
+      .get();
+    return snap.docs
+      .map((doc) => orderFromSnapshot(Number(doc.id), doc.data() as Row))
+      .filter(
+        (order) =>
+          order.paymentMethod === "card_online" &&
+          order.paymentStatus === "unpaid" &&
+          shouldRestock(order.status),
+      );
+  },
+
+  /** Delete old idempotency keys so the collection does not grow forever. */
+  async cleanupIdempotency(olderThan: Date, limit = 200): Promise<number> {
+    const db = await getDb();
+    const snap = await db
+      .collection(COLLECTIONS.orderIdempotency)
+      .where("createdAt", "<=", olderThan)
+      .limit(limit)
+      .get();
+    if (snap.empty) return 0;
+    const batch = db.batch();
+    snap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    return snap.size;
+  },
+
+  /** Generic patch for non-financial admin edits (notes, method, status). */
+  async updateOrder(id: number, data: Partial<OrderRow>): Promise<void> {
+    await updateRow(COLLECTIONS.orders, id, data);
   },
 };

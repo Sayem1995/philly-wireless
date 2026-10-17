@@ -1,6 +1,7 @@
 import { trpc } from "@/providers/trpc";
 import Seo from "@/components/Seo";
 import Reveal from "@/components/Reveal";
+import AddToCartButton from "@/components/AddToCartButton";
 import { ShoppingBag } from "lucide-react";
 import { STORE } from "@contracts/constants";
 import { productImageUrl } from "@/lib/productImages";
@@ -47,6 +48,18 @@ export default function Accessories() {
                       <span className="font-serif text-xl text-burgundy">{money(p.price)}</span>
                       <span className={`text-[12px] ${p.stock > 0 ? "text-emerald-700" : "text-burgundy"}`}>{p.stock > 0 ? "In stock" : "Sold out"}</span>
                     </div>
+                    <AddToCartButton
+                      tone="outline"
+                      product={{
+                        id: p.id,
+                        name: p.name,
+                        price: p.price,
+                        stock: p.stock,
+                        imagePath: p.imagePath,
+                        kind: p.kind,
+                      }}
+                      className="mt-4 w-full"
+                    />
                   </div>
                 </div>
               </Reveal>

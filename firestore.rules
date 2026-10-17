@@ -60,6 +60,19 @@ service cloud.firestore {
     match /parts/{id} {
       allow read, write: if false;
     }
+    // Online shop orders. Written only by /api/trpc (Admin SDK bypasses these
+    // rules) after the server has re-priced the cart and reserved stock.
+    match /orders/{id} {
+      allow read, write: if false;
+    }
+    // One document per checkout idempotency key, written in the same
+    // transaction as the order. Never client-readable.
+    match /orderIdempotency/{id} {
+      allow read, write: if false;
+    }
+    match /receipts/{id} {
+      allow read, write: if false;
+    }
     match /__counters/{id} {
       allow read, write: if false;
     }

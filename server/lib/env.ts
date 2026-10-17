@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { normaliseTaxPercent } from "../../contracts/orders.js";
 
 // NOTE: Never throw at module load. Vercel/Cloud Functions imports env.ts
 // immediately when the API function boots — throwing here would take down
@@ -6,6 +7,13 @@ import "dotenv/config";
 // Missing credentials are handled lazily when a Firestore/Auth call runs.
 function optional(name: string): string {
   return process.env[name] ?? "";
+}
+
+/** A finite number from the environment, clamped to a sane range. */
+function numeric(name: string, fallback: number, min: number, max: number): number {
+  const parsed = Number(optional(name).trim());
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
 }
 
 export const env = {
@@ -45,9 +53,39 @@ export const env = {
   // Override in Vercel when the domain changes. Falls back to BRAND_SITE_URL
   // so a second storefront gets its own domain in outgoing links without
   // needing an extra variable.
-  publicSiteUrl:
+  // Trailing slashes are stripped once here so callers can concatenate paths
+  // without double slashes; the value must still be an absolute https origin.
+  publicSiteUrl: (
     optional("PUBLIC_SITE_URL") ||
     optional("BRAND_SITE_URL") ||
     optional("VITE_BRAND_SITE_URL") ||
-    "https://philly-wireless.vercel.app",
+    "https://philly-wireless.vercel.app"
+  )
+    .trim()
+    .replace(/\/+$/, ""),
+
+  // ── Online card payments (optional — Stripe Checkout) ──────────
+  // Without these the checkout still works: customers pick "pay in store" and
+  // the order is recorded for staff to collect payment at pickup. With a
+  // secret key (sk_test_/sk_live_ or a restricted rk_ key) the cart offers
+  // "pay online by card" as well.
+  stripeSecretKey: optional("STRIPE_SECRET_KEY").trim(),
+  stripeWebhookSecret: optional("STRIPE_WEBHOOK_SECRET").trim(),
+
+  // How long an unpaid card order holds its stock. Stripe Checkout sessions
+  // must last at least 30 minutes; the order reservation is released only
+  // after Stripe's own session has expired, so a late payment cannot arrive
+  // after the stock was returned. Default 60, max 24h.
+  orderReservationMinutes: numeric("ORDER_RESERVATION_MINUTES", 60, 30, 1440),
+
+  // ── Scheduled reconciliation (Vercel Cron) ────────────────────
+  // Bearer token checked by /api/cron/reconcile-orders. Vercel Cron sends it
+  // automatically when this variable exists; without it the endpoint is off.
+  cronSecret: optional("CRON_SECRET").trim(),
+
+  // ── Sales tax on online orders ─────────────────────────────────
+  // Percent, 0–25. Defaults to 0 so adding the shop does not silently change
+  // what customers are charged; the correct rate for the business must be
+  // confirmed with an accountant (Philadelphia is commonly 8%).
+  orderTaxPercent: normaliseTaxPercent(optional("ORDER_TAX_PERCENT")),
 };

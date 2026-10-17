@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import Seo from "@/components/Seo";
 import Reveal from "@/components/Reveal";
+import AddToCartButton from "@/components/AddToCartButton";
 import { Smartphone, Tablet, BadgeCheck } from "lucide-react";
 import { STORE } from "@contracts/constants";
 import { productImageUrl } from "@/lib/productImages";
@@ -92,8 +93,19 @@ export default function Devices() {
                         {p.stock > 0 ? `${p.stock} in stock` : "Sold out"}
                       </span>
                     </div>
-                    <a href={STORE.phoneHref} className="mt-5 block text-center border border-burgundy/25 text-burgundy text-sm font-semibold py-3 rounded-full hover:bg-burgundy hover:text-ivory transition-all duration-300">
-                      Call to Reserve
+                    <AddToCartButton
+                      product={{
+                        id: p.id,
+                        name: p.name,
+                        price: p.price,
+                        stock: p.stock,
+                        imagePath: p.imagePath,
+                        kind: p.kind,
+                      }}
+                      className="mt-5 w-full"
+                    />
+                    <a href={STORE.phoneHref} className="mt-2.5 block text-center text-[12.5px] text-ink/45 hover:text-burgundy transition-colors">
+                      Questions? Call {STORE.phone}
                     </a>
                   </div>
                 </div>

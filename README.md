@@ -155,6 +155,58 @@ rather than failing the booking or the status change.
 `FIREBASE_PRIVATE_KEY` may contain literal `\n` escapes; they are converted to
 real newlines at load time, and wrapping quotes are stripped.
 
+### Online shop: cart & payments
+
+`/devices` and `/accessories` have an **Add to cart** action. The cart lives in
+`localStorage` but is re-priced from Firestore at checkout, so an edited or
+stale cart can never change what is actually charged.
+
+Checkout offers in-store pickup or local delivery, and these payment methods:
+
+| Method | Behaviour |
+| --- | --- |
+| Card online | Stripe Checkout — requires `STRIPE_SECRET_KEY` |
+| Card in store / on delivery | Order recorded, paid in person |
+| Cash | Paid in person |
+| Zelle | Order held until the shop confirms the transfer |
+
+Card-online flow: `shop.createOrder` re-prices the cart, writes the order and
+reserves stock in **one** Firestore transaction, then redirects to Stripe. The
+customer's checkout carries an idempotency key, so a retried request returns the
+same order instead of reserving twice. `shop.confirmOrderPayment` and the
+signature-verified webhook both re-read the Stripe session and check the order
+token, order id, amount, currency and payment status before marking it paid —
+the webhook is idempotent and sends at most one confirmation email.
+
+Subscribe the webhook (`POST /api/stripe/webhook`) to
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`checkout.session.expired` and `checkout.session.async_payment_failed`.
+Expired card checkouts release their stock; a daily cron
+(`/api/cron/reconcile-orders`, protected by `CRON_SECRET`) re-checks Stripe and
+releases only sessions that are expired and unpaid. It never releases stock for
+a paid order. The same sweep is available in **Admin → Orders → Release expired
+holds**.
+
+Paid orders must be **refunded**, not cancelled or deleted. Admin → Orders
+refunds card payments through Stripe (recording `refunded` only after Stripe
+reports success) and asks staff to confirm offline refunds. Completed orders are
+never silently restocked.
+
+| Variable | Purpose |
+| --- | --- |
+| `STRIPE_SECRET_KEY` | Enables card-online checkout (`sk_test_…`/`sk_live_…`, or restricted `rk_…`) |
+| `STRIPE_WEBHOOK_SECRET` | Verifies webhook deliveries (`whsec_…`) |
+| `ORDER_TAX_PERCENT` | Sales tax on the merchandise subtotal, 0–25 (default 0; confirm the rate) |
+| `ORDER_RESERVATION_MINUTES` | Stock hold and Stripe session length, 30–1440 (default 60) |
+| `PUBLIC_SITE_URL` | Absolute **https** URL for Stripe redirects and email links |
+| `CRON_SECRET` | Bearer token for the reconciliation cron (Vercel sends it) |
+
+Without Stripe keys the shop still works end-to-end: orders are recorded, stock
+is reserved, confirmation emails go out, and staff collect payment at pickup.
+Local delivery is currently free; no delivery fee is added. See
+[`docs/CHECKOUT_AUDIT.md`](docs/CHECKOUT_AUDIT.md) for the full audit, Stripe
+test-mode runbook and production checklist.
+
 ### Keyless Google Cloud authentication (recommended)
 
 Storing a service-account private key is a long-lived secret. Many Google Cloud
