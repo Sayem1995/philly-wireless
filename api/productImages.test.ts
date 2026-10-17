@@ -175,7 +175,7 @@ describe("validateProductImageFile", () => {
   it("rejects a non-image, naming the type in the reason", () => {
     const result = validateProductImageFile({ size: 1000, type: "application/pdf" });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toContain("application/pdf");
+    if (result.ok === false) expect(result.reason).toContain("application/pdf");
   });
 
   it("rejects an unsupported image type", () => {

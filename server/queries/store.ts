@@ -934,7 +934,7 @@ export const store = {
         }),
       );
 
-      if (!plan.ok) throw new StockError(plan.reason);
+      if (plan.ok === false) throw new StockError(plan.reason);
 
       tx.set(orderRef, row);
       if (idemRef) {

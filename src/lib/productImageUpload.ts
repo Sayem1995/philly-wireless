@@ -29,7 +29,7 @@ export async function uploadProductImage(
   file: File,
 ): Promise<UploadedProductImage> {
   const check = validateProductImageFile(file);
-  if (!check.ok) throw new ProductImageUploadError(check.reason);
+  if (check.ok === false) throw new ProductImageUploadError(check.reason);
 
   let prepared;
   try {
