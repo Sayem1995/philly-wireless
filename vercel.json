@@ -3,8 +3,5 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "crons": [
-    { "path": "/api/cron/reconcile-orders", "schedule": "0 8 * * *" }
   ]
 }
