@@ -251,16 +251,33 @@ export default function HeroDevice() {
 
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: reduce ? 0 : 0.5, delay: reduce ? 0 : 1.2 }}
+        animate={reduce ? { opacity: 1, scale: 1 } : { opacity: 1, scale: 1, y: [0, -6, 0], rotate: [0, 5, 0] }}
+        transition={
+          reduce
+            ? { duration: 0 }
+            : {
+                opacity: { duration: 0.5, delay: 1.2 },
+                scale: { duration: 0.5, delay: 1.2 },
+                y: { duration: 4.8, repeat: Infinity, ease: "easeInOut", delay: 1.4 },
+                rotate: { duration: 5.4, repeat: Infinity, ease: "easeInOut", delay: 1.4 },
+              }
+        }
         className="absolute bottom-8 left-8 z-20 grid h-11 w-11 place-items-center rounded-full border border-burgundy/15 bg-ivory/90 text-burgundy shadow-lg shadow-burgundy/10 backdrop-blur"
       >
         <Wrench size={17} />
       </motion.div>
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: reduce ? 0 : 0.5, delay: reduce ? 0 : 1.35 }}
+        animate={reduce ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [1, 1.08, 1], y: [0, 5, 0] }}
+        transition={
+          reduce
+            ? { duration: 0 }
+            : {
+                opacity: { duration: 0.5, delay: 1.35 },
+                scale: { duration: 5.2, repeat: Infinity, ease: "easeInOut", delay: 1.4 },
+                y: { duration: 4.4, repeat: Infinity, ease: "easeInOut", delay: 1.6 },
+              }
+        }
         className="absolute right-16 top-32 z-20 hidden h-9 w-9 place-items-center rounded-full border border-burgundy/15 bg-ivory/90 text-burgundy shadow-lg shadow-burgundy/10 backdrop-blur xl:grid"
       >
         <Sparkles size={14} />

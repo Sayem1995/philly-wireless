@@ -116,13 +116,14 @@ export default function Devices() {
                         className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     ) : p.subcategory === "iPad" || p.subcategory === "Tablet" ? (
-                      <Tablet size={72} strokeWidth={1} className="text-burgundy/40 group-hover:scale-110 transition-transform duration-500" />
+                      <Tablet size={72} strokeWidth={1} className="text-burgundy/40 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-3" />
                     ) : (
-                      <Smartphone size={72} strokeWidth={1} className="text-burgundy/40 group-hover:scale-110 transition-transform duration-500" />
+                      <Smartphone size={72} strokeWidth={1} className="text-burgundy/40 transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-3" />
                     )}
-                    {p.badge && <span className="absolute top-4 left-4 bg-burgundy text-ivory text-[11px] font-semibold tracking-wide px-3.5 py-1.5 rounded-full">{p.badge}</span>}
+                    <span className="pointer-events-none absolute inset-0 z-[1] -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+                    {p.badge && <span className="absolute top-4 left-4 z-10 bg-burgundy text-ivory text-[11px] font-semibold tracking-wide px-3.5 py-1.5 rounded-full">{p.badge}</span>}
                     {p.kind === "device_refurb" && (
-                      <span className="absolute top-4 right-4 bg-ivory/90 text-burgundy text-[11px] font-semibold px-3 py-1.5 rounded-full flex items-center gap-1">
+                      <span className="absolute top-4 right-4 z-10 bg-ivory/90 text-burgundy text-[11px] font-semibold px-3 py-1.5 rounded-full flex items-center gap-1">
                         <BadgeCheck size={12} /> 1-yr warranty
                       </span>
                     )}

@@ -91,8 +91,9 @@ export default function Accessories() {
                 <div className="group bg-white rounded-3xl border border-blush overflow-hidden h-full flex flex-col hover:-translate-y-2 hover:shadow-xl hover:shadow-burgundy/10 transition-all duration-500">
                   {/* Product image when the admin uploaded one; icon otherwise. */}
                   {imageUrl && (
-                    <div className="aspect-[4/3] bg-blush-light overflow-hidden">
+                    <div className="relative aspect-[4/3] bg-blush-light overflow-hidden">
                       <img src={imageUrl} alt={p.name} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
                     </div>
                   )}
                   <div className="p-7 flex-1 flex flex-col">

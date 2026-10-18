@@ -59,8 +59,8 @@ export default function Home() {
             </motion.p>
             <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.3 }}
               className="mt-9 flex flex-wrap gap-4">
-              <Link to="/book" className="bg-burgundy text-ivory font-semibold px-8 py-4 rounded-full hover:bg-burgundy-dark hover:-translate-y-1 hover:shadow-xl hover:shadow-burgundy/25 transition-all duration-300 inline-flex items-center gap-2">
-                Book a Repair <ArrowRight size={17} />
+              <Link to="/book" className="group bg-burgundy text-ivory font-semibold px-8 py-4 rounded-full hover:bg-burgundy-dark hover:-translate-y-1 hover:shadow-xl hover:shadow-burgundy/25 transition-all duration-300 inline-flex items-center gap-2">
+                Book a Repair <ArrowRight size={17} className="transition-transform duration-300 group-hover:translate-x-1" />
               </Link>
               <a href={STORE.phoneHref} className="border border-burgundy/25 text-burgundy font-semibold px-8 py-4 rounded-full hover:bg-blush hover:-translate-y-1 transition-all duration-300 inline-flex items-center gap-2">
                 <Phone size={17} /> {STORE.phone}
@@ -89,7 +89,7 @@ export default function Home() {
               <Reveal key={s.title} delay={i * 0.06}>
                 <Link to="/services" className="group block bg-white rounded-3xl border border-blush p-7 h-full hover:-translate-y-2 hover:shadow-xl hover:shadow-burgundy/10 hover:border-burgundy/30 transition-all duration-500">
                   <div className="w-12 h-12 rounded-2xl bg-blush grid place-items-center mb-5 group-hover:bg-burgundy transition-colors duration-500">
-                    <s.icon size={22} className="text-burgundy group-hover:text-ivory transition-colors duration-500" />
+                    <s.icon size={22} className="text-burgundy group-hover:text-ivory transition-all duration-500 group-hover:-rotate-6 group-hover:scale-110" />
                   </div>
                   <h3 className="font-serif text-xl text-ink mb-2">{s.title}</h3>
                   <p className="text-sm text-ink/55 leading-relaxed mb-4">{s.desc}</p>
@@ -154,7 +154,8 @@ export default function Home() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
             {TESTIMONIALS.map((t, i) => (
               <Reveal key={t.name} delay={i * 0.08}>
-                <figure className="bg-white rounded-3xl border border-blush p-7 h-full flex flex-col hover:-translate-y-2 hover:shadow-xl hover:shadow-burgundy/10 transition-all duration-500">
+                <figure className="group relative overflow-hidden bg-white rounded-3xl border border-blush p-7 h-full flex flex-col hover:-translate-y-2 hover:shadow-xl hover:shadow-burgundy/10 transition-all duration-500">
+                  <span className="absolute inset-x-7 top-0 h-px origin-left scale-x-0 bg-burgundy/30 transition-transform duration-500 group-hover:scale-x-100" />
                   <div className="flex text-[#FBBC05] mb-4">{[...Array(5)].map((_, j) => <Star key={j} size={14} fill="currentColor" />)}</div>
                   <blockquote className="text-[15px] text-ink/70 leading-relaxed flex-1">“{t.text}”</blockquote>
                   <figcaption className="mt-5 pt-4 border-t border-blush">
@@ -171,7 +172,7 @@ export default function Home() {
       {/* CTA */}
       <section className="py-24 bg-gradient-to-br from-burgundy to-burgundy-dark text-ivory text-center relative overflow-hidden">
         <motion.div className="absolute inset-0 opacity-10" animate={{ backgroundPosition: ["0% 0%", "100% 100%"] }} transition={{ duration: 20, repeat: Infinity, repeatType: "reverse" }}
-          style={{ backgroundImage: `radial-gradient(circle at 30% 50%, ${cssVarRgb("--brand-secondary", "243 213 216")} 0%, transparent 40%)` }} />
+          style={{ backgroundImage: `radial-gradient(circle at 30% 50%, ${cssVarRgb("--brand-secondary", "243 213 216")} 0%, transparent 40%)`, backgroundSize: "200% 200%" }} />
         <Reveal className="relative max-w-2xl mx-auto px-5">
           <h2 className="font-serif text-4xl md:text-5xl mb-5">Broken device?<br />We'll fix it today.</h2>
           <p className="text-blush/80 mb-9">Free diagnostics · No appointment needed · Most repairs in under an hour</p>

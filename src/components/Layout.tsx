@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
+import { motion } from "framer-motion";
 import { Menu, X, Phone, MapPin, Clock, MessageCircle, Facebook, Instagram, Twitter, ArrowUp, ArrowUpRight, ShoppingBag, Wrench } from "lucide-react";
 import Logo from "./Logo";
 import CartDrawer from "./CartDrawer";
+import PageTransition from "./PageTransition";
+import ScrollProgress from "./ScrollProgress";
 import { STORE, BRAND } from "@contracts/constants";
 import { compactHours } from "@contracts/brand";
 import { trpc } from "@/providers/trpc";
@@ -71,7 +74,7 @@ function Navbar() {
         }`}
       >
         <div className="max-w-7xl mx-auto px-5 h-[72px] flex items-center gap-5">
-          <Link to="/" aria-label={`${STORE.name} home`} className="shrink-0">
+          <Link to="/" aria-label={`${STORE.name} home`} className="shrink-0 transition-transform duration-300 hover:scale-[1.02]">
             <Logo />
           </Link>
 
@@ -108,20 +111,26 @@ function Navbar() {
               aria-label={count > 0 ? `Open cart, ${count} item${count === 1 ? "" : "s"}` : "Open cart"}
               className="group inline-flex items-center gap-2 rounded-full border border-ink/10 bg-white/60 px-3 py-2 text-ink/70 transition-all hover:border-burgundy/30 hover:bg-white hover:text-burgundy"
             >
-              <ShoppingBag size={17} />
+              <ShoppingBag size={17} className="transition-transform duration-300 group-hover:-rotate-6" />
               <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.14em]">Bag</span>
               {count > 0 && (
-                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-burgundy text-ivory text-[10px] font-semibold grid place-items-center leading-none">
+                <motion.span
+                  key={count}
+                  initial={{ scale: 0.55, opacity: 0.4 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 520, damping: 24 }}
+                  className="min-w-[18px] h-[18px] px-1 rounded-full bg-burgundy text-ivory text-[10px] font-semibold grid place-items-center leading-none"
+                >
                   {count > 9 ? "9+" : count}
-                </span>
+                </motion.span>
               )}
             </button>
 
             <Link
               to="/book"
-              className="hidden sm:inline-flex items-center gap-2 rounded-full bg-burgundy px-5 py-2.5 text-[12px] font-semibold text-ivory shadow-sm shadow-burgundy/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-burgundy-dark hover:shadow-md"
+              className="group hidden sm:inline-flex items-center gap-2 rounded-full bg-burgundy px-5 py-2.5 text-[12px] font-semibold text-ivory shadow-sm shadow-burgundy/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-burgundy-dark hover:shadow-md"
             >
-              <Wrench size={14} />
+              <Wrench size={14} className="transition-transform duration-300 group-hover:rotate-12" />
               Book a Repair
             </Link>
 
@@ -290,7 +299,11 @@ function Footer() {
 
 export default function Layout() {
   const { pathname } = useLocation();
-  useEffect(() => window.scrollTo({ top: 0 }), [pathname]);
+  useEffect(() => {
+    // Braces matter: an effect must return a cleanup function, and returning
+    // the host scrollTo() result can leave React with a non-function destroy.
+    window.scrollTo({ top: 0 });
+  }, [pathname]);
   const [top, setTop] = useState(false);
   useEffect(() => {
     const fn = () => setTop(window.scrollY > 600);
@@ -299,6 +312,7 @@ export default function Layout() {
   }, []);
   return (
     <div className="min-h-screen bg-ivory font-sans text-ink antialiased">
+      <ScrollProgress />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[100] focus:rounded-full focus:bg-ink focus:px-5 focus:py-3 focus:text-sm focus:font-semibold focus:text-ivory"
@@ -306,7 +320,9 @@ export default function Layout() {
         Skip to content
       </a>
       <Navbar />
-      <main id="main-content" tabIndex={-1}><Outlet /></main>
+      <main id="main-content" tabIndex={-1}>
+        <PageTransition><Outlet /></PageTransition>
+      </main>
       <Footer />
       <CartDrawer />
       <a href={`https://wa.me/${BRAND.whatsapp}`} target="_blank" rel="noreferrer" aria-label="Chat with us"
