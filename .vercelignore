@@ -1,0 +1,7 @@
+# Tests live beside the API for local Vitest runs, but Vercel treats every file
+# under api/ as a serverless function. Excluding them keeps the deployment under
+# the Hobby function limit and out of Vercel's production typecheck.
+api/**/*.test.ts
+api/**/*.test.tsx
+api/**/*.spec.ts
+api/**/*.spec.tsx
