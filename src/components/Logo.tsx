@@ -39,7 +39,7 @@ export default function Logo({ light = false }: { light?: boolean }) {
           {BRAND.wordmarkAccent ? (
             <>
               {" "}
-              <span className="text-burgundy">{BRAND.wordmarkAccent}</span>
+              <span className={light ? "text-blush" : "text-burgundy"}>{BRAND.wordmarkAccent}</span>
             </>
           ) : null}
         </span>
