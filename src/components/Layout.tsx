@@ -67,7 +67,7 @@ function Navbar() {
         className={`border-b transition-all duration-500 ${
           scrolled
             ? "border-blush bg-ivory/95 backdrop-blur-xl shadow-[0_10px_30px_-22px_rgba(43,26,24,0.45)]"
-            : "border-blush/70 bg-ivory/92 backdrop-blur-md"
+            : "border-blush/70 bg-ivory/95 backdrop-blur-md"
         }`}
       >
         <div className="max-w-7xl mx-auto px-5 h-[72px] flex items-center gap-5">

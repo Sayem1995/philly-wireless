@@ -4,6 +4,7 @@ import { ShieldCheck, Zap, Award, Star, ArrowRight, Phone } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Seo from "@/components/Seo";
 import Reveal from "@/components/Reveal";
+import HeroDevice from "@/components/HeroDevice";
 import { SERVICES, TESTIMONIALS, STATS, PROCESS } from "@/data/static";
 import { STORE, BRAND } from "@contracts/constants";
 import { cssVarRgb } from "@/lib/theme";
@@ -72,31 +73,7 @@ export default function Home() {
               ))}
             </motion.div>
           </div>
-          {/* Animated device illustration (2D) */}
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1, delay: 0.25 }}
-            className="relative hidden lg:block">
-            <motion.div animate={{ y: [0, -14, 0] }} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-              className="relative mx-auto w-[300px]">
-              <div className="rounded-[3rem] border-[10px] border-ink bg-gradient-to-br from-burgundy via-burgundy-light to-blush-dark aspect-[9/19] shadow-2xl shadow-burgundy/30 overflow-hidden relative">
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 w-24 h-6 bg-ink rounded-full" />
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-ivory">
-                  <ShieldCheck size={52} className="mb-4 opacity-90" />
-                  <p className="font-serif text-2xl">Lifetime</p>
-                  <p className="font-serif text-2xl">Warranty</p>
-                </div>
-              </div>
-              <motion.div animate={{ y: [0, 10, 0], rotate: [0, 6, 0] }} transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                className="absolute -left-16 top-16 bg-ivory rounded-2xl shadow-xl px-5 py-4 border border-blush">
-                <p className="text-2xl font-serif text-burgundy">4.9★</p>
-                <p className="text-[11px] text-ink/50">2,300+ reviews</p>
-              </motion.div>
-              <motion.div animate={{ y: [0, -8, 0], rotate: [0, -5, 0] }} transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-                className="absolute -right-14 bottom-20 bg-ivory rounded-2xl shadow-xl px-5 py-4 border border-blush">
-                <p className="text-2xl font-serif text-burgundy">30 min</p>
-                <p className="text-[11px] text-ink/50">average repair</p>
-              </motion.div>
-            </motion.div>
-          </motion.div>
+          <HeroDevice />
         </div>
       </section>
 
