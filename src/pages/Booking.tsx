@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import Seo from "@/components/Seo";
-import { STORE } from "@contracts/constants";
+import { BRAND, STORE } from "@contracts/constants";
 import { formatBookingDevice } from "@contracts/booking";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -63,24 +63,67 @@ type BookingItem = {
 const MAX_ITEMS = 6;
 const STEPS = ["Device", "Brand", "Model", "Problem", "Repairs", "Schedule", "Details", "Review"];
 
+function localIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function nextDays(n: number) {
-  const out: { iso: string; day: string; num: string; month: string }[] = [];
+  const out: { iso: string; day: string; num: string; month: string; isToday: boolean }[] = [];
   const d = new Date();
   // Normalise to local noon so DST shifts can't roll the date over.
   d.setHours(12, 0, 0, 0);
+  const today = localIso(d);
   while (out.length < n) {
-    d.setDate(d.getDate() + 1);
+    const iso = localIso(d);
     out.push({
       // Build the ISO date from LOCAL parts. `toISOString()` would convert to
       // UTC, so for users behind UTC the booked date could differ from the
       // date shown on the button (e.g. label "13" but booked 2026-09-14).
-      iso: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+      iso,
       day: d.toLocaleDateString("en-US", { weekday: "short" }),
       num: String(d.getDate()),
       month: d.toLocaleDateString("en-US", { month: "short" }),
+      isToday: iso === today,
     });
+    d.setDate(d.getDate() + 1);
   }
   return out;
+}
+
+/** `"9:00 AM"` → minutes since midnight. */
+function parseClock(value: string): number | null {
+  const match = /^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i.exec(value.trim());
+  if (!match) return null;
+  let hour = Number(match[1]) % 12;
+  if (match[3].toUpperCase() === "PM") hour += 12;
+  return hour * 60 + Number(match[2] ?? 0);
+}
+
+/** The shop's opening window for a YYYY-MM-DD date, in local minutes. */
+function storeWindow(iso: string): { open: number; close: number } | null {
+  const weekday = new Date(`${iso}T12:00:00`)
+    .toLocaleDateString("en-US", { weekday: "long" })
+    .toLowerCase();
+  const row = BRAND.hours.find((entry) => entry.days.includes(weekday));
+  if (!row) return null;
+  const [openRaw, closeRaw] = row.h.split(/\s*[–—-]\s*/);
+  const open = parseClock(openRaw ?? "");
+  const close = parseClock(closeRaw ?? "");
+  return open == null || close == null ? null : { open, close };
+}
+
+/**
+ * A slot is bookable only inside the shop's hours and, for today, at least 30
+ * minutes from now. Without this, including today would expose past times.
+ */
+function isSlotBookable(iso: string, slot: string, now = new Date()): boolean {
+  const window = storeWindow(iso);
+  if (!window) return false;
+  const [hour, minute] = slot.split(":").map(Number);
+  const slotMinutes = hour * 60 + minute;
+  if (slotMinutes < window.open || slotMinutes >= window.close) return false;
+  if (iso !== localIso(now)) return true;
+  return slotMinutes >= now.getHours() * 60 + now.getMinutes() + 30;
 }
 
 const sel = "border-burgundy bg-blush ring-2 ring-burgundy/20";
@@ -159,6 +202,7 @@ export default function Booking() {
     ["Where can we reach you?", "We'll text or call to confirm within 15 minutes."],
     ["Everything look right?", "Review your repair visit, then confirm."],
   ][step];
+  const now = new Date();
 
   return (
     <>
@@ -295,7 +339,7 @@ export default function Booking() {
                     {days.map((d) => (
                       <button key={d.iso} onClick={() => { setDate(d.iso); setSlot(""); }}
                         className={`shrink-0 w-[68px] py-3.5 rounded-2xl border text-center transition-all duration-300 ${date === d.iso ? "border-burgundy bg-burgundy text-ivory" : "border-ink/10 bg-white text-ink/60 hover:border-burgundy/40"}`}>
-                        <span className="block text-[11px] uppercase opacity-70">{d.day}</span>
+                        <span className="block text-[11px] uppercase opacity-70">{d.isToday ? "Today" : d.day}</span>
                         <span className="block font-serif text-xl mt-0.5">{d.num}</span>
                         <span className="block text-[11px] opacity-70">{d.month}</span>
                       </button>
@@ -306,14 +350,23 @@ export default function Booking() {
                       <p className="text-xs tracking-[0.2em] uppercase text-ink/45 mb-3">Check-in time</p>
                       {isFetching ? <p className="text-ink/40 text-sm py-4">Checking availability…</p> : (
                         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
-                          {(slots ?? []).map((s) => (
-                            <button key={s.slot} disabled={!s.available} onClick={() => setSlot(s.slot)}
-                              className={`py-3.5 rounded-2xl border text-sm transition-all duration-300 ${!s.available ? "opacity-30 line-through cursor-not-allowed border-ink/10 bg-white" : slot === s.slot ? "border-burgundy bg-burgundy text-ivory font-semibold" : "border-ink/10 bg-white text-ink/60 hover:border-burgundy/40"}`}>
-                              {s.slot}
-                            </button>
-                          ))}
+                          {(slots ?? []).map((s) => {
+                            const bookable = s.available && isSlotBookable(date, s.slot, now);
+                            return (
+                              <button key={s.slot} disabled={!bookable} onClick={() => setSlot(s.slot)}
+                                className={`py-3.5 rounded-2xl border text-sm transition-all duration-300 ${!bookable ? "opacity-30 line-through cursor-not-allowed border-ink/10 bg-white" : slot === s.slot ? "border-burgundy bg-burgundy text-ivory font-semibold" : "border-ink/10 bg-white text-ink/60 hover:border-burgundy/40"}`}>
+                                {s.slot}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
+                      {!isFetching && (slots?.length ?? 0) > 0 &&
+                        (slots ?? []).every((s) => !s.available || !isSlotBookable(date, s.slot, now)) && (
+                          <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-[12.5px] leading-relaxed text-amber-800">
+                            No check-in times left for this day. Choose another day, or call {STORE.phone} if you need same-day help.
+                          </p>
+                        )}
                     </>
                   )}
                 </div>
