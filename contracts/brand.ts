@@ -478,7 +478,7 @@ export function readBrand(): Brand {
     readString(["BRAND_WORDMARK_ACCENT", "VITE_BRAND_WORDMARK_ACCENT"], ""),
   );
 
-  const phone = readString(["BRAND_PHONE", "VITE_BRAND_PHONE"], "(215) 555-0123");
+  const phone = readString(["BRAND_PHONE", "VITE_BRAND_PHONE"], "(814) 384-1507");
   const siteUrl = readString(
     ["BRAND_SITE_URL", "VITE_BRAND_SITE_URL"],
     readString(["PUBLIC_SITE_URL"], "https://philly-wireless.vercel.app"),

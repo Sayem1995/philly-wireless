@@ -48,7 +48,7 @@ describe("Philly Phone Repair defaults", () => {
     expect(b.wordmarkAccent).toBe("Phone Repair");
     expect(b.address).toBe("1033 Chestnut Street");
     expect(b.city).toBe("Philadelphia, PA 19107");
-    expect(b.phone).toBe("(215) 555-0123");
+    expect(b.phone).toBe("(814) 384-1507");
     expect(b.email).toBe("hello@phillyphonerepair.com");
     expect(b.logo.type).toBe("image");
     expect(b.logo.icon).toBe("/logo-icon.png");
@@ -58,8 +58,8 @@ describe("Philly Phone Repair defaults", () => {
     // Regression guard: these were hardcoded before branding was configurable,
     // and a dropped "+1" would silently break click-to-call on mobile.
     const b = readBrand();
-    expect(b.phoneHref).toBe("tel:+12155550123");
-    expect(b.whatsapp).toBe("12155550123");
+    expect(b.phoneHref).toBe("tel:+18143841507");
+    expect(b.whatsapp).toBe("18143841507");
   });
 
   it("keeps the original opening hours and schema.org output", () => {
