@@ -1,4 +1,5 @@
 import { Routes, Route } from "react-router"
+import { MotionConfig } from "framer-motion"
 import Layout from "./components/Layout"
 import Home from "./pages/Home"
 import Services from "./pages/Services"
@@ -29,6 +30,7 @@ import AdminReports from "./pages/admin/Reports"
 
 export default function App() {
   return (
+    <MotionConfig reducedMotion="user">
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
@@ -61,5 +63,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </MotionConfig>
   )
 }

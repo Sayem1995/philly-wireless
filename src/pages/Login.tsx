@@ -12,6 +12,7 @@ import { auth, isFirebaseConfigured } from "@/lib/firebase";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { BRAND, STORE } from "@contracts/constants";
+import Seo from "@/components/Seo";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function Login() {
   if (!isFirebaseConfigured()) {
     return (
       <div className="min-h-screen flex items-center justify-center">
+        <Seo title="Staff Sign In" noindex />
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <CardTitle>Sign-in unavailable</CardTitle>
@@ -80,6 +82,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center">
+      <Seo title="Staff Sign In" noindex />
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <CardTitle>Welcome</CardTitle>

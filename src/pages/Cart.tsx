@@ -36,6 +36,7 @@ export default function Cart() {
       <Seo
         title="Your Cart"
         description="Review the devices and accessories in your cart, then check out for in-store pickup or local delivery."
+        noindex
       />
       <section className="pt-36 pb-10 bg-gradient-to-b from-blush-light to-ivory">
         <div className="max-w-6xl mx-auto px-5">

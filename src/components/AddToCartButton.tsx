@@ -59,6 +59,15 @@ export default function AddToCartButton({
       type="button"
       onClick={onClick}
       disabled={soldOut}
+      aria-label={
+        soldOut
+          ? `${product.name} is sold out`
+          : flash
+            ? `${product.name} added to cart`
+            : inCart > 0
+              ? `Add another ${product.name} to cart`
+              : `Add ${product.name} to cart`
+      }
       className={cn(
         "inline-flex items-center justify-center gap-2 rounded-full text-sm font-semibold px-6 py-3 transition-all duration-300",
         soldOut

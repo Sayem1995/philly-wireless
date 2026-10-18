@@ -75,7 +75,62 @@ function brand(): Plugin {
         .replace(/__BRAND_EMAIL__/g, store.email)
         .replace(/__BRAND_SITE_URL__/g, store.siteUrl)
         .replace(/__BRAND_ICON__/g, store.logo.icon)
+        .replace(
+          /__BRAND_OG_IMAGE__/g,
+          `${store.siteUrl.replace(/\/+$/, "")}${store.logo.full.startsWith("/") ? "" : "/"}${store.logo.full}`,
+        )
         .replace(/__BRAND_JSONLD__/g, JSON.stringify(jsonLd, null, 2))
+    },
+
+    // SPA hosts otherwise return index.html for /robots.txt and /sitemap.xml.
+    // Emit real files per storefront so crawlers get the configured site URL.
+    generateBundle() {
+      const base = store.siteUrl.replace(/\/+$/, "")
+      const routes = [
+        "/",
+        "/services",
+        "/pricing",
+        "/devices",
+        "/accessories",
+        "/book",
+        "/about",
+        "/contact",
+        "/faq",
+        "/blog",
+      ]
+      const urls = routes
+        .map((route) => `  <url><loc>${base}${route}</loc></url>`)
+        .join("\n")
+
+      this.emitFile({
+        type: "asset",
+        fileName: "robots.txt",
+        source: [
+          "User-agent: *",
+          "Allow: /",
+          "Disallow: /admin",
+          "Disallow: /login",
+          "Disallow: /cart",
+          "Disallow: /checkout",
+          "Disallow: /order/",
+          "Disallow: /receipt/",
+          "",
+          `Sitemap: ${base}/sitemap.xml`,
+          "",
+        ].join("\n"),
+      })
+
+      this.emitFile({
+        type: "asset",
+        fileName: "sitemap.xml",
+        source: [
+          '<?xml version="1.0" encoding="UTF-8"?>',
+          '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+          urls,
+          "</urlset>",
+          "",
+        ].join("\n"),
+      })
     },
   }
 }

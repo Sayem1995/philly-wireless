@@ -299,15 +299,21 @@ export default function Layout() {
   }, []);
   return (
     <div className="min-h-screen bg-ivory font-sans text-ink antialiased">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[100] focus:rounded-full focus:bg-ink focus:px-5 focus:py-3 focus:text-sm focus:font-semibold focus:text-ivory"
+      >
+        Skip to content
+      </a>
       <Navbar />
-      <main><Outlet /></main>
+      <main id="main-content" tabIndex={-1}><Outlet /></main>
       <Footer />
       <CartDrawer />
       <a href={`https://wa.me/${BRAND.whatsapp}`} target="_blank" rel="noreferrer" aria-label="Chat with us"
         className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-burgundy text-ivory grid place-items-center shadow-lg shadow-burgundy/30 hover:bg-burgundy-dark hover:-translate-y-1 transition-all duration-300">
         <MessageCircle size={22} />
       </a>
-      <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Back to top"
+      <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Back to top" tabIndex={top ? 0 : -1}
         className={`fixed bottom-24 right-6 z-40 w-11 h-11 rounded-full border border-burgundy/20 bg-ivory text-burgundy grid place-items-center shadow-md hover:bg-blush transition-all duration-300 ${top ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
         <ArrowUp size={18} />
       </button>

@@ -39,7 +39,7 @@ export default function Receipt() {
 
   return (
     <div className="min-h-screen bg-ivory py-10 px-5 print:py-0">
-      <Seo title={`Receipt #PPR-R${data.id}`} />
+      <Seo title={`Receipt #PPR-R${data.id}`} noindex />
       <div className="max-w-lg mx-auto">
         <div className="flex justify-center mb-6 print:hidden"><Logo /></div>
 

@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import Seo from "@/components/Seo";
 import { trpc } from "@/providers/trpc";
-import { STORE } from "@contracts/constants";
+import { BRAND, STORE } from "@contracts/constants";
 import {
   FULFILLMENT_LABELS,
   PAYMENT_METHOD_LABELS,
@@ -118,7 +118,8 @@ export default function OrderConfirmation() {
     <section className="pt-32 pb-24 bg-gradient-to-b from-blush-light to-ivory min-h-screen">
       <Seo
         title={`Order ${order.orderNumber}`}
-        description="Your Philly Wireless order details, payment status and pickup information."
+        description={`Your ${BRAND.name} order details, payment status and pickup information.`}
+        noindex
       />
       <div className="max-w-3xl mx-auto px-5">
         <Link

@@ -163,7 +163,7 @@ export default function Checkout() {
   if (items.length === 0 && !placed) {
     return (
       <>
-        <Seo title="Checkout" />
+        <Seo title="Checkout" noindex />
         <section className="pt-36 pb-24 max-w-2xl mx-auto px-5 text-center">
           <span className="w-20 h-20 rounded-3xl bg-blush grid place-items-center mx-auto mb-6">
             <ShoppingBag size={32} className="text-burgundy/60" />
@@ -188,6 +188,7 @@ export default function Checkout() {
       <Seo
         title="Checkout"
         description="Check out securely: choose in-store pickup or local delivery, then pay online by card or in store."
+        noindex
       />
       <section className="pt-32 pb-10 bg-gradient-to-b from-blush-light to-ivory">
         <div className="max-w-6xl mx-auto px-5">
@@ -225,6 +226,7 @@ export default function Checkout() {
                 <input
                   className={field}
                   placeholder="Full name *"
+                  aria-label="Full name"
                   autoComplete="name"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -233,6 +235,7 @@ export default function Checkout() {
                 <input
                   className={field}
                   placeholder="Phone number *"
+                  aria-label="Phone number"
                   type="tel"
                   autoComplete="tel"
                   value={form.phone}
@@ -242,6 +245,7 @@ export default function Checkout() {
                 <input
                   className={`${field} sm:col-span-2`}
                   placeholder="Email (for your confirmation)"
+                  aria-label="Email for order confirmation"
                   type="email"
                   autoComplete="email"
                   value={form.email}
@@ -294,6 +298,7 @@ export default function Checkout() {
                   className={`${field} mt-4 resize-none`}
                   rows={3}
                   placeholder="Delivery address — street, city, ZIP *"
+                  aria-label="Delivery address"
                   autoComplete="street-address"
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
@@ -346,6 +351,7 @@ export default function Checkout() {
               <textarea
                 className={`${field} resize-none`}
                 rows={3}
+                aria-label="Order notes"
                 placeholder="Optional — a preferred pickup time, a colour preference, a gate code…"
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}

@@ -34,6 +34,7 @@ export default function HeroDevice() {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: reduce ? 0 : 0.9, delay: reduce ? 0 : 0.2 }}
       className="relative hidden min-h-[620px] items-center justify-center lg:flex"
+      aria-hidden="true"
     >
       {/* Warm glow and orbital rings */}
       <div className="pointer-events-none absolute h-[540px] w-[540px] rounded-full bg-[radial-gradient(circle,rgba(127,29,29,0.18),transparent_66%)] blur-2xl" />

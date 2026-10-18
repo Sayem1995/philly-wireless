@@ -1,10 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "react-router";
+import Seo from "@/components/Seo";
 
 export default function NotFound() {
   return (
     <div className="min-h-screen flex items-center justify-center">
+      <Seo title="Page Not Found" noindex />
       <Card className="w-full max-w-sm text-center">
         <CardHeader>
           <CardTitle className="text-4xl font-bold">404</CardTitle>

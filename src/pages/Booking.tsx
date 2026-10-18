@@ -231,10 +231,10 @@ export default function Booking() {
               {/* 5 — details */}
               {step === 5 && (
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name *" className="border border-ink/15 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-burgundy bg-white" />
-                  <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Phone number *" type="tel" className="border border-ink/15 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-burgundy bg-white" />
-                  <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email (for confirmation)" type="email" className="sm:col-span-2 border border-ink/15 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-burgundy bg-white" />
-                  <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Anything we should know? (e.g. dropped it yesterday, screen flickers)" rows={3} className="sm:col-span-2 border border-ink/15 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-burgundy bg-white resize-none" />
+                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name *" aria-label="Full name" className="border border-ink/15 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-burgundy bg-white" />
+                  <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Phone number *" aria-label="Phone number" type="tel" className="border border-ink/15 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-burgundy bg-white" />
+                  <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email (for confirmation)" aria-label="Email for confirmation" type="email" className="sm:col-span-2 border border-ink/15 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-burgundy bg-white" />
+                  <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Anything we should know? (e.g. dropped it yesterday, screen flickers)" aria-label="Notes about the repair" rows={3} className="sm:col-span-2 border border-ink/15 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-burgundy bg-white resize-none" />
                   <p className="sm:col-span-2 text-[12.5px] text-ink/45 leading-relaxed">By booking, you agree to our repair terms: free diagnostic first, and we'll always confirm the final quote with you before any work begins. We never access your personal data.</p>
                 </div>
               )}
