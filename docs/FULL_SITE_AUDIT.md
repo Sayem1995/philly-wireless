@@ -170,6 +170,15 @@ Severity: **P0** security/payment/data loss/broken production; **P1** major jour
 | Generated `dist/public/robots.txt` | present, private paths disallowed, sitemap URL correct |
 | Generated `dist/public/sitemap.xml` | present with 10 static public routes |
 
+### Deployment verification (commit `de9ca52`)
+
+- All three Vercel projects reported **success**.
+- Live `GET /robots.txt` returned `200 text/plain; charset=utf-8` with the expected disallow rules and sitemap URL.
+- Live `GET /sitemap.xml` returned `200 application/xml` with the static public routes.
+- Live `/accessories` rendered canonical `https://philly-wireless.vercel.app/accessories`, `robots: index, follow`, matching `og:url`, and product-specific add-to-cart accessible names.
+- Typing “USB” into the live catalogue search reduced/retained a matching result set (7 matching items) without a page error.
+- Local production build verified `/cart` switches to `robots: noindex, nofollow` and removes the canonical link.
+
 ### Not verified / requires credentials or manual work
 
 - A real Stripe card payment, webhook delivery, refund, and payout reconciliation. `onlineCard` and `webhookConfigured` are currently false in production configuration.
