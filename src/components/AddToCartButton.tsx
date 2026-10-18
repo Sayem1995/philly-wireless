@@ -9,8 +9,9 @@ import type { CartProduct } from "@/lib/cart";
  * Adds a catalogue product to the cart.
  *
  * Stock is enforced here for immediate feedback (and again, authoritatively, on
- * the server at checkout). Opening the drawer after a successful add makes the
- * result obvious and gives the customer a one-click route to checkout.
+ * the server at checkout). Adding does NOT open the cart: the customer keeps
+ * browsing and chooses when to review or check out via the header bag. The
+ * button flashes "Added" and a toast confirms the item.
  */
 export default function AddToCartButton({
   product,
@@ -22,7 +23,7 @@ export default function AddToCartButton({
   /** `solid` for a primary call to action, `outline` for secondary cards. */
   tone?: "solid" | "outline";
 }) {
-  const { add, openCart, qtyOf } = useCart();
+  const { add, qtyOf } = useCart();
   const [flash, setFlash] = useState(false);
   const inCart = qtyOf(product.id);
   const soldOut = product.stock <= 0;
@@ -48,8 +49,9 @@ export default function AddToCartButton({
       return;
     }
     setFlash(true);
-    openCart();
-    toast.success(`${product.name} added to cart`);
+    toast.success(`${product.name} added to cart`, {
+      description: "Open the bag when you're ready to check out.",
+    });
   };
 
   return (
