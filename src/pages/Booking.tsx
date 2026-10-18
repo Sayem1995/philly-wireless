@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import Seo from "@/components/Seo";
 import { STORE } from "@contracts/constants";
+import { formatBookingDevice } from "@contracts/booking";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Tablet, Laptop, Gamepad2, Battery, Plug, Layers, Camera,
   Droplets, Volume2, HelpCircle, Check, ChevronLeft, ChevronRight,
-  MapPin, ShieldCheck, Zap, Search, PartyPopper,
+  MapPin, ShieldCheck, Zap, Search, PartyPopper, Plus, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -52,7 +53,15 @@ const MODELS: Record<string, string[]> = {
   Xbox: ["Xbox Series X", "Xbox Series S", "Xbox One"],
 };
 
-const STEPS = ["Device", "Brand", "Model", "Problem", "Schedule", "Details", "Review"];
+type BookingItem = {
+  deviceType: string;
+  brand: string;
+  model: string;
+  repairType: string;
+};
+
+const MAX_ITEMS = 6;
+const STEPS = ["Device", "Brand", "Model", "Problem", "Repairs", "Schedule", "Details", "Review"];
 
 function nextDays(n: number) {
   const out: { iso: string; day: string; num: string; month: string }[] = [];
@@ -83,6 +92,7 @@ export default function Booking() {
   const [devType, setDevType] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
+  const [items, setItems] = useState<BookingItem[]>([]);
   const [date, setDate] = useState("");
   const [slot, setSlot] = useState("");
   const [form, setForm] = useState({ name: "", phone: "", email: "", notes: "" });
@@ -91,29 +101,60 @@ export default function Booking() {
   const days = useMemo(() => nextDays(10), []);
   const { data: slots, isFetching } = trpc.shop.slots.useQuery({ date }, { enabled: !!date });
   const book = trpc.shop.book.useMutation({
-    onSuccess: (r) => { setBookingId(r.bookingId); setStep(7); window.scrollTo({ top: 0, behavior: "smooth" }); },
+    onSuccess: (r) => { setBookingId(r.bookingId); setStep(8); window.scrollTo({ top: 0, behavior: "smooth" }); },
     onError: (e) => toast.error(e.message),
   });
 
   const canNext =
     (step === 0 && !!devType) || (step === 1 && !!brand) || (step === 2 && !!model) ||
-    (step === 3 && !!problem) || (step === 4 && !!date && !!slot) ||
-    (step === 5 && !!form.name && form.phone.replace(/\D/g, "").length >= 10);
+    (step === 3 && !!problem && items.length < MAX_ITEMS) ||
+    (step === 4 && items.length > 0) || (step === 5 && !!date && !!slot) ||
+    (step === 6 && !!form.name && form.phone.replace(/\D/g, "").length >= 10);
 
-  const next = () => canNext && setStep(step + 1);
-  const back = () => setStep(Math.max(0, step - 1));
+  const addCurrentItem = () => {
+    if (!devType || !brand || !model || !problem) return;
+    setItems((current) => [...current, { deviceType: devType, brand, model, repairType: problem }]);
+    setDevType("");
+    setBrand("");
+    setModel("");
+    setProblem("");
+    setStep(4);
+  };
+
+  const next = () => {
+    if (!canNext) return;
+    if (step === 3) {
+      addCurrentItem();
+      return;
+    }
+    setStep(step + 1);
+  };
+
+  const back = () => {
+    // Step 4 is the repair list; going back starts a fresh item rather than
+    // reopening the problem picker for an item that is already saved.
+    setStep(step === 4 ? 0 : Math.max(0, step - 1));
+  };
 
   const submit = () =>
     book.mutate({
-      customerName: form.name, phone: form.phone, email: form.email,
-      device: model, repairType: problem, date, timeSlot: slot, notes: form.notes,
+      customerName: form.name,
+      phone: form.phone,
+      email: form.email,
+      device: items.map((item) => item.model).join(" · "),
+      repairType: items.map((item) => item.repairType).join(" · "),
+      items,
+      date,
+      timeSlot: slot,
+      notes: form.notes,
     });
 
   const stepHead = [
     ["What kind of device is it?", "So we can match parts and the right technician."],
     ["What's the brand?", "This helps us confirm part availability."],
     ["Which model exactly?", "Pick your model, or the closest match."],
-    ["What can we fix for you?", "Pick the problem — we'll handle the rest."],
+    ["What can we fix for you?", "Pick one repair. You can add another device or repair next."],
+    ["Your repair list", "Bring multiple devices or repairs to one appointment."],
     ["When should we expect you?", "Pick a day, then a check-in time. Takes about a minute."],
     ["Where can we reach you?", "We'll text or call to confirm within 15 minutes."],
     ["Everything look right?", "Review your repair visit, then confirm."],
@@ -149,12 +190,17 @@ export default function Booking() {
               {step === 3 && (
                 <div className="grid sm:grid-cols-2 gap-3">
                   {PROBLEMS.map((p) => (
-                    <button key={p.id} onClick={() => { setProblem(p.id); setStep(4); }}
+                    <button key={p.id} onClick={() => setProblem(p.id)}
                       className={`flex items-center gap-4 p-5 rounded-2xl border bg-white text-left transition-all duration-300 ${problem === p.id ? sel : card}`}>
                       <span className={`w-11 h-11 rounded-xl grid place-items-center shrink-0 ${problem === p.id ? "bg-burgundy text-ivory" : "bg-blush text-burgundy"}`}><p.icon size={20} /></span>
                       <span><span className="block font-semibold text-[15px]">{p.id}</span><span className="block text-[12.5px] text-ink/45 mt-0.5">{p.desc}</span></span>
                     </button>
                   ))}
+                  {items.length >= MAX_ITEMS && (
+                    <p className="sm:col-span-2 rounded-2xl bg-amber-50 px-4 py-3 text-[12.5px] text-amber-800">
+                      You have reached the {MAX_ITEMS}-repair limit for one booking. Call {STORE.phone} if you need a larger drop-off.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -196,8 +242,53 @@ export default function Booking() {
                 </div>
               )}
 
-              {/* 4 — schedule */}
+              {/* 4 — repair list */}
               {step === 4 && (
+                <div>
+                  <div className="space-y-3">
+                    {items.map((item, index) => (
+                      <div key={`${item.model}-${item.repairType}-${index}`} className="flex items-start gap-4 rounded-2xl border border-blush bg-white p-5">
+                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blush text-burgundy">
+                          {item.deviceType === "Tablet" ? <Tablet size={20} /> : item.deviceType === "Laptop" ? <Laptop size={20} /> : item.deviceType === "Console" ? <Gamepad2 size={20} /> : <Smartphone size={20} />}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-[15px] text-ink">{formatBookingDevice(item.brand, item.model)}</p>
+                          <p className="mt-0.5 text-[13px] text-burgundy">{item.repairType}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setItems((current) => current.filter((_, i) => i !== index))}
+                          aria-label={`Remove ${item.model} ${item.repairType} from booking`}
+                          className="rounded-full p-2 text-ink/30 transition-colors hover:bg-red-50 hover:text-red-600"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {items.length < MAX_ITEMS ? (
+                    <button
+                      type="button"
+                      onClick={() => setStep(0)}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-burgundy/30 bg-blush-light/50 px-5 py-4 text-sm font-semibold text-burgundy transition-colors hover:border-burgundy hover:bg-blush"
+                    >
+                      <Plus size={17} /> Add another device or repair
+                    </button>
+                  ) : (
+                    <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-[12.5px] text-amber-800">
+                      You can book up to {MAX_ITEMS} repairs at once. Call {STORE.phone} for a larger drop-off.
+                    </p>
+                  )}
+
+                  <p className="mt-4 text-[12.5px] leading-relaxed text-ink/45">
+                    One appointment covers every item above. Diagnostics are free and we will confirm each quote before starting.
+                  </p>
+                </div>
+              )}
+
+              {/* 5 — schedule */}
+              {step === 5 && (
                 <div>
                   <p className="text-xs tracking-[0.2em] uppercase text-ink/45 mb-3">Choose a day</p>
                   <div className="flex gap-2 overflow-x-auto pb-3 mb-7">
@@ -228,8 +319,8 @@ export default function Booking() {
                 </div>
               )}
 
-              {/* 5 — details */}
-              {step === 5 && (
+              {/* 6 — details */}
+              {step === 6 && (
                 <div className="grid sm:grid-cols-2 gap-4">
                   <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name *" aria-label="Full name" className="border border-ink/15 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-burgundy bg-white" />
                   <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Phone number *" aria-label="Phone number" type="tel" className="border border-ink/15 rounded-2xl px-5 py-4 text-sm focus:outline-none focus:border-burgundy bg-white" />
@@ -239,17 +330,35 @@ export default function Booking() {
                 </div>
               )}
 
-              {/* 6 — review */}
-              {step === 6 && (
+              {/* 7 — review */}
+              {step === 7 && (
                 <div>
                   <div className="bg-white rounded-3xl border border-blush overflow-hidden">
-                    <div className="p-7 border-b border-blush flex items-start gap-5">
-                      <span className="w-12 h-12 rounded-2xl bg-blush grid place-items-center shrink-0"><Smartphone size={22} className="text-burgundy" /></span>
-                      <div className="flex-1">
-                        <p className="font-serif text-xl">{model}</p>
-                        <p className="text-sm text-burgundy font-medium mt-0.5">{problem}</p>
+                    <div className="p-7 border-b border-blush">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="font-serif text-xl">
+                            {items.length} repair{items.length === 1 ? "" : "s"} in one visit
+                          </p>
+                          <p className="mt-1 text-[12.5px] text-ink/45">
+                            We will diagnose each item and confirm every quote before work starts.
+                          </p>
+                        </div>
+                        <button onClick={() => setStep(4)} className="shrink-0 text-xs text-ink/40 hover:text-burgundy underline underline-offset-2">Edit</button>
                       </div>
-                      <button onClick={() => setStep(0)} className="text-xs text-ink/40 hover:text-burgundy underline underline-offset-2">Change</button>
+                      <ul className="mt-5 space-y-3">
+                        {items.map((item, index) => (
+                          <li key={`${item.model}-${item.repairType}-${index}`} className="flex items-start gap-3 rounded-2xl bg-blush-light/70 px-4 py-3">
+                            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ivory text-burgundy">
+                              {item.deviceType === "Tablet" ? <Tablet size={16} /> : item.deviceType === "Laptop" ? <Laptop size={16} /> : item.deviceType === "Console" ? <Gamepad2 size={16} /> : <Smartphone size={16} />}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-[13.5px] font-semibold text-ink">{formatBookingDevice(item.brand, item.model)}</span>
+                              <span className="block text-[12.5px] text-burgundy">{item.repairType}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                     <dl className="p-7 text-sm space-y-3.5">
                       {[
@@ -275,14 +384,14 @@ export default function Booking() {
                 </div>
               )}
 
-              {/* 7 — confirmation */}
-              {step === 7 && bookingId !== null && (
+              {/* 8 — confirmation */}
+              {step === 8 && bookingId !== null && (
                 <div className="text-center pt-6">
                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, damping: 14 }}
                     className="w-24 h-24 rounded-full bg-burgundy text-ivory grid place-items-center mx-auto mb-8"><PartyPopper size={40} /></motion.div>
                   <h1 className="font-serif text-4xl text-ink mb-3">You're booked in!</h1>
                   <p className="text-ink/55 max-w-md mx-auto leading-relaxed">
-                    Confirmation <b className="text-burgundy">#PPR-{bookingId}</b> · {new Date(date + "T12:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at {slot}.
+                    Confirmation <b className="text-burgundy">#PPR-{bookingId}</b> · {items.length} repair{items.length === 1 ? "" : "s"} · {new Date(date + "T12:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at {slot}.
                     We'll call <b>{form.phone}</b> within 15 minutes during business hours to confirm.
                   </p>
                   <div className="grid sm:grid-cols-3 gap-3 max-w-2xl mx-auto mt-10 text-left">
@@ -311,12 +420,12 @@ export default function Booking() {
                 className="inline-flex items-center gap-2 text-sm font-medium text-ink/50 hover:text-burgundy disabled:opacity-0 transition-colors">
                 <ChevronLeft size={16} /> Back
               </button>
-              {step < 5 ? (
+              {step < 6 ? (
                 <button onClick={next} disabled={!canNext}
                   className="inline-flex items-center gap-2 bg-burgundy text-ivory font-semibold px-8 py-4 rounded-full hover:bg-burgundy-dark hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-300">
-                  Continue <ChevronRight size={16} />
+                  {step === 3 ? "Add repair" : step === 4 ? "Choose a time" : "Continue"} <ChevronRight size={16} />
                 </button>
-              ) : step === 5 ? (
+              ) : step === 6 ? (
                 <button onClick={next} disabled={!canNext}
                   className="inline-flex items-center gap-2 bg-burgundy text-ivory font-semibold px-8 py-4 rounded-full hover:bg-burgundy-dark hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-300">
                   Review Booking <ChevronRight size={16} />

@@ -2,6 +2,7 @@ import { store } from "./queries/store.js";
 import { sendEmail } from "./email.js";
 import { sendSms } from "./sms.js";
 import { STORE, BRAND } from "../contracts/constants.js";
+import { formatBookingDevice } from "../contracts/booking.js";
 
 /**
  * Customer-facing repair notifications.
@@ -31,6 +32,7 @@ export type NotifiableBooking = {
   email: string | null;
   device: string;
   repairType: string;
+  items?: { deviceType?: string; brand?: string; model: string; repairType: string }[];
   date: string;
   timeSlot: string;
   warrantyUntil?: string | null;
@@ -100,8 +102,14 @@ function copyFor(
           `<p style="color:${C.muted};font-size:14px;line-height:1.7;margin:0 0 16px;">Hi ${first}, thanks — your repair visit is booked. Here's what we have:</p>
            <ul style="color:${C.ink};font-size:14px;line-height:1.9;margin:0 0 16px;padding-left:18px;">
              <li>Reference: <strong>${REF(b.id)}</strong></li>
-             <li>Device: ${b.device}</li>
-             <li>Repair: ${b.repairType}</li>
+             ${b.items?.length
+               ? b.items
+                   .map(
+                     (item) =>
+                       `<li>${formatBookingDevice(item.brand, item.model)}: <strong>${item.repairType}</strong></li>`,
+                   )
+                   .join("")
+               : `<li>Device: ${b.device}</li><li>Repair: ${b.repairType}</li>`}
              <li>When: ${when}</li>
            </ul>
            <p style="color:${C.muted};font-size:13px;line-height:1.7;margin:0;">Diagnostics are always free and we'll confirm the final quote before any work begins. Need to change it? Call ${STORE.phone}.</p>`,
@@ -137,7 +145,11 @@ function copyFor(
           `<p style="color:${C.muted};font-size:14px;line-height:1.7;margin:0 0 16px;">Hi ${first}, your <strong>${b.device}</strong> is repaired and ready for pickup.</p>
            <ul style="color:${C.ink};font-size:14px;line-height:1.9;margin:0 0 16px;padding-left:18px;">
              <li>Reference: <strong>${REF(b.id)}</strong></li>
-             <li>Repair: ${b.repairType}</li>
+             ${b.items?.length
+               ? b.items
+                   .map((item) => `<li>${formatBookingDevice(item.brand, item.model)}: ${item.repairType}</li>`)
+                   .join("")
+               : `<li>Repair: ${b.repairType}</li>`}
              <li>Where: ${STORE.address}, ${STORE.city}</li>
              ${b.warrantyUntil ? `<li>Warranty valid until: <strong>${b.warrantyUntil}</strong></li>` : ""}
            </ul>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { BOOKING_STATUSES, TIME_SLOTS } from "@contracts/constants";
+import { formatBookingDevice } from "@contracts/booking";
 import { toast } from "sonner";
 import { X, Send } from "lucide-react";
 
@@ -58,7 +59,12 @@ export default function Bookings() {
               <tr key={b.id} className="border-b border-blush/50 hover:bg-blush-light/50">
                 <td className="px-5 py-3.5 text-ink/40">#{b.id}</td>
                 <td className="px-5 py-3.5"><p className="font-medium">{b.customerName}</p><p className="text-xs text-ink/45">{b.phone}</p></td>
-                <td className="px-5 py-3.5">{b.device}<p className="text-xs text-ink/45">{b.repairType}</p></td>
+                <td className="px-5 py-3.5">
+                  {b.items.length > 1 ? `${b.items.length} repairs` : b.device}
+                  <p className="text-xs text-ink/45">
+                    {b.items.length > 1 ? b.items.map((item) => item.repairType).join(" · ") : b.repairType}
+                  </p>
+                </td>
                 <td className="px-5 py-3.5">{b.date}<p className="text-xs text-ink/45">{b.timeSlot}</p></td>
                 <td className="px-5 py-3.5"><span className={`text-[11px] px-3 py-1 rounded-full font-medium ${STATUS_COLORS[b.status]}`}>{b.status.replace("_", " ")}</span></td>
                 <td className="px-5 py-3.5 text-xs text-ink/50">{b.warrantyUntil ?? "—"}</td>
@@ -78,9 +84,23 @@ export default function Bookings() {
               <button onClick={() => setSel(null)} aria-label="Close"><X size={22} className="text-ink/40 hover:text-burgundy" /></button>
             </div>
             <dl className="text-sm space-y-2 mb-6">
-              {[["Customer", booking.customerName], ["Phone", booking.phone], ["Email", booking.email ?? "—"], ["Device", booking.device], ["Repair", booking.repairType], ["Notes", booking.notes ?? "—"]].map(([k, v]) => (
+              {[["Customer", booking.customerName], ["Phone", booking.phone], ["Email", booking.email ?? "—"]].map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-4"><dt className="text-ink/45">{k}</dt><dd className="font-medium text-right">{v}</dd></div>
               ))}
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink/45">Repairs</dt>
+                <dd className="font-medium text-right">
+                  <ul className="space-y-1">
+                    {booking.items.map((item, index) => (
+                      <li key={`${item.model}-${index}`}>
+                        {formatBookingDevice(item.brand, item.model)}
+                        <span className="block text-xs font-normal text-burgundy">{item.repairType}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4"><dt className="text-ink/45">Notes</dt><dd className="font-medium text-right">{booking.notes ?? "—"}</dd></div>
             </dl>
             <label className="block text-xs uppercase tracking-wider text-ink/45 mb-2">Status</label>
             <select value={booking.status} onChange={(e) => update.mutate({ id: booking.id, status: e.target.value as never })} className={`${input} w-full mb-4`}>

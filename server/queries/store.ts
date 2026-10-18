@@ -199,14 +199,25 @@ export type SubscriberRow = {
   createdAt: Date;
 };
 
+export type BookingItem = {
+  deviceType: string;
+  brand: string;
+  model: string;
+  repairType: string;
+};
+
 export type BookingRow = {
   id: number;
   customerId: number | null;
   customerName: string;
   phone: string;
   email: string | null;
+  /** Legacy single-device summary. New bookings also carry `items`. */
   device: string;
+  /** Legacy single-repair summary. New bookings also carry `items`. */
   repairType: string;
+  /** One appointment can cover multiple devices/repairs. */
+  items: BookingItem[];
   date: string;
   timeSlot: string;
   notes: string | null;
@@ -393,15 +404,47 @@ function mapSubscriber(r: Row): SubscriberRow {
   };
 }
 
+function mapBookingItems(value: unknown): BookingItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const item = entry as Record<string, unknown>;
+    const model = String(item.model ?? item.device ?? "").trim();
+    const repairType = String(item.repairType ?? "").trim();
+    if (!model || !repairType) return [];
+    return [
+      {
+        deviceType: String(item.deviceType ?? ""),
+        brand: String(item.brand ?? ""),
+        model,
+        repairType,
+      },
+    ];
+  });
+}
+
 function mapBooking(r: Row): BookingRow {
+  const device = String(r.device ?? "");
+  const repairType = String(r.repairType ?? "");
+  const storedItems = mapBookingItems(r.items);
+  // Old documents predate items[]; expose them as a one-item booking so the
+  // admin, notifications and reports can use one shape.
+  const items =
+    storedItems.length > 0
+      ? storedItems
+      : device || repairType
+        ? [{ deviceType: "", brand: "", model: device, repairType }]
+        : [];
+
   return {
     id: Number(r.id),
     customerId: r.customerId == null ? null : Number(r.customerId),
     customerName: String(r.customerName ?? ""),
     phone: String(r.phone ?? ""),
     email: r.email == null ? null : String(r.email),
-    device: String(r.device ?? ""),
-    repairType: String(r.repairType ?? ""),
+    device,
+    repairType,
+    items,
     date: String(r.date ?? ""),
     timeSlot: String(r.timeSlot ?? ""),
     notes: r.notes == null ? null : String(r.notes),

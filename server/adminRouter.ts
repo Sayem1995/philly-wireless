@@ -106,7 +106,10 @@ export const adminRouter = createRouter({
 
     // auto warranty: 1 year from completion for screen repairs, 90 days otherwise
     if (data.status === "completed" && !data.warrantyUntil) {
-      const days = existing?.repairType.toLowerCase().includes("screen") ? 365 : 90;
+      const hasScreenRepair = existing?.items.some((item) =>
+        item.repairType.toLowerCase().includes("screen"),
+      ) ?? existing?.repairType.toLowerCase().includes("screen");
+      const days = hasScreenRepair ? 365 : 90;
       set.warrantyUntil = new Date(Date.now() + days * 864e5).toISOString().slice(0, 10);
     }
 
@@ -127,6 +130,7 @@ export const adminRouter = createRouter({
           email: existing.email,
           device: existing.device,
           repairType: existing.repairType,
+          items: existing.items,
           date: (data.date as string) ?? existing.date,
           timeSlot: (data.timeSlot as string) ?? existing.timeSlot,
           warrantyUntil: (set.warrantyUntil as string) ?? existing.warrantyUntil,
@@ -921,9 +925,18 @@ export const adminRouter = createRouter({
       }, {}),
     ).map(([status, n]) => ({ status, n }));
 
+    // Count every item, not the joined summary string, so a two-repair booking
+    // contributes one to each repair/device tally rather than an unreadable
+    // combined label.
+    const reportItems = all.flatMap((booking) =>
+      booking.items.length > 0
+        ? booking.items
+        : [{ model: booking.device, repairType: booking.repairType }],
+    );
+
     const byType = Object.entries(
-      all.reduce<Record<string, number>>((acc, b) => {
-        acc[b.repairType] = (acc[b.repairType] ?? 0) + 1;
+      reportItems.reduce<Record<string, number>>((acc, item) => {
+        acc[item.repairType] = (acc[item.repairType] ?? 0) + 1;
         return acc;
       }, {}),
     )
@@ -932,8 +945,8 @@ export const adminRouter = createRouter({
       .slice(0, 8);
 
     const byDevice = Object.entries(
-      all.reduce<Record<string, number>>((acc, b) => {
-        acc[b.device] = (acc[b.device] ?? 0) + 1;
+      reportItems.reduce<Record<string, number>>((acc, item) => {
+        acc[item.model] = (acc[item.model] ?? 0) + 1;
         return acc;
       }, {}),
     )

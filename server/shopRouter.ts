@@ -391,17 +391,37 @@ export const shopRouter = createRouter({
   /* ---------- booking: create ---------- */
   book: publicQuery
     .input(
-      z.object({
-        customerName: z.string().min(1),
-        phone: z.string().min(7),
-        email: z.string().email().optional().or(z.literal("")),
-        device: z.string().min(1),
-        repairType: z.string().min(1),
-        date: z.string().min(8),
-        timeSlot: z.string().min(4),
-        notes: z.string().optional(),
-        priceEstimate: z.string().optional(),
-      }),
+      z
+        .object({
+          customerName: z.string().min(1),
+          phone: z.string().min(7),
+          email: z.string().email().optional().or(z.literal("")),
+          // Legacy single-repair fields remain accepted for older clients.
+          device: z.string().min(1).optional(),
+          repairType: z.string().min(1).optional(),
+          items: z
+            .array(
+              z.object({
+                deviceType: z.string().max(40).optional().default(""),
+                brand: z.string().max(60).optional().default(""),
+                model: z.string().min(1).max(120),
+                repairType: z.string().min(1).max(120),
+              }),
+            )
+            .min(1)
+            .max(6)
+            .optional(),
+          date: z.string().min(8),
+          timeSlot: z.string().min(4),
+          notes: z.string().optional(),
+          priceEstimate: z.string().optional(),
+        })
+        .refine(
+          (value) =>
+            (value.items?.length ?? 0) > 0 ||
+            (Boolean(value.device) && Boolean(value.repairType)),
+          { message: "Add at least one repair.", path: ["items"] },
+        ),
     )
     .mutation(async ({ input }) => {
       // conflict check
@@ -411,6 +431,19 @@ export const shopRouter = createRouter({
       if (clash) {
         throw new Error("That time slot was just taken — please pick another.");
       }
+
+      const items = input.items?.length
+        ? input.items
+        : [
+            {
+              deviceType: "",
+              brand: "",
+              model: input.device ?? "",
+              repairType: input.repairType ?? "",
+            },
+          ];
+      const summaryDevice = items.map((item) => item.model).join(" · ");
+      const summaryRepair = items.map((item) => item.repairType).join(" · ");
 
       // link or create CRM customer
       const existingCustomer = await store.customerByPhone(input.phone);
@@ -427,8 +460,9 @@ export const shopRouter = createRouter({
         customerName: input.customerName,
         phone: input.phone,
         email: input.email || null,
-        device: input.device,
-        repairType: input.repairType,
+        device: summaryDevice,
+        repairType: summaryRepair,
+        items,
         date: input.date,
         timeSlot: input.timeSlot,
         notes: input.notes || null,
@@ -442,8 +476,9 @@ export const shopRouter = createRouter({
         customerName: input.customerName,
         phone: input.phone,
         email: input.email || null,
-        device: input.device,
-        repairType: input.repairType,
+        device: summaryDevice,
+        repairType: summaryRepair,
+        items,
         date: input.date,
         timeSlot: input.timeSlot,
         notes: input.notes || null,
@@ -457,8 +492,9 @@ export const shopRouter = createRouter({
           customerName: input.customerName,
           phone: input.phone,
           email: input.email || null,
-          device: input.device,
-          repairType: input.repairType,
+          device: summaryDevice,
+          repairType: summaryRepair,
+          items,
           date: input.date,
           timeSlot: input.timeSlot,
         },
@@ -469,7 +505,7 @@ export const shopRouter = createRouter({
       try {
         const staff = await sendEmail({
           to: process.env.STAFF_EMAIL ?? STORE.email,
-          subject: `New booking #PPR-${booking.id}: ${input.device} — ${input.repairType}`,
+          subject: `New booking #PPR-${booking.id}: ${summaryDevice} — ${summaryRepair}`,
           html: staffNotificationHtml(details),
         });
         await store.addNotification({

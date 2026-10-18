@@ -111,6 +111,7 @@ function booking(overrides: Partial<BookingRow> = {}): BookingRow {
     email: null,
     device: "iPhone 15",
     repairType: "Screen Replacement",
+    items: [{ deviceType: "Phone", brand: "Apple", model: "iPhone 15", repairType: "Screen Replacement" }],
     date: "2026-02-01",
     timeSlot: "10:00",
     notes: null,
@@ -292,6 +293,57 @@ describe("shop.book", () => {
     mockedSendEmail.mockRejectedValue(new Error("smtp down"));
 
     await expect(caller().shop.book(input)).resolves.toEqual({ ok: true, bookingId: 44 });
+  });
+
+  it("stores multiple repair items in one booking", async () => {
+    mockedStore.bookingsByDate.mockResolvedValue([]);
+    mockedStore.customerByPhone.mockResolvedValue(undefined);
+    mockedStore.createCustomer.mockResolvedValue({
+      id: 7,
+      name: "Ada Lovelace",
+      phone: "2155550100",
+      email: "ada@example.com",
+      notes: null,
+      createdAt: new Date(),
+    } satisfies CustomerRow);
+    mockedStore.createBooking.mockResolvedValue(booking({ id: 45 }));
+    mockedStore.addNotification.mockResolvedValue(undefined);
+
+    const items = [
+      { deviceType: "Phone", brand: "Apple", model: "iPhone 15", repairType: "Screen Replacement" },
+      { deviceType: "Tablet", brand: "Apple iPad", model: "iPad Air", repairType: "Battery Replacement" },
+    ];
+
+    await expect(
+      caller().shop.book({
+        customerName: "Ada Lovelace",
+        phone: "2155550100",
+        email: "ada@example.com",
+        date: "2026-02-01",
+        timeSlot: "10:00",
+        items,
+      }),
+    ).resolves.toEqual({ ok: true, bookingId: 45 });
+
+    expect(mockedStore.createBooking).toHaveBeenCalledWith(
+      expect.objectContaining({
+        device: "iPhone 15 · iPad Air",
+        repairType: "Screen Replacement · Battery Replacement",
+        items,
+      }),
+    );
+  });
+
+  it("rejects a booking with no repair item", async () => {
+    await expect(
+      caller().shop.book({
+        customerName: "Ada Lovelace",
+        phone: "2155550100",
+        date: "2026-02-01",
+        timeSlot: "10:00",
+      }),
+    ).rejects.toThrow(/at least one repair/i);
+    expect(mockedStore.createBooking).not.toHaveBeenCalled();
   });
 
   it("rejects a too-short phone number", async () => {
@@ -727,7 +779,12 @@ describe("admin.updateBooking warranty rules", () => {
   });
 
   it("applies a 90-day warranty to other repairs", async () => {
-    mockedStore.getBooking.mockResolvedValue(booking({ repairType: "Battery Replacement" }));
+    mockedStore.getBooking.mockResolvedValue(
+      booking({
+        repairType: "Battery Replacement",
+        items: [{ deviceType: "Phone", brand: "Apple", model: "iPhone 15", repairType: "Battery Replacement" }],
+      }),
+    );
     mockedStore.updateBooking.mockResolvedValue(undefined);
 
     await caller(adminUser).admin.updateBooking({ id: 1, status: "completed" });

@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { STORE, BRAND } from "../contracts/constants.js";
 import { longHours } from "../contracts/brand.js";
+import { formatBookingDevice } from "../contracts/booking.js";
 import { maskEmail } from "./lib/mask.js";
 import {
   formatCents,
@@ -210,6 +211,7 @@ export function bookingConfirmationHtml(b: {
 export function staffNotificationHtml(b: {
   id: number; customerName: string; phone: string; email?: string | null;
   device: string; repairType: string; date: string; timeSlot: string; notes?: string | null;
+  items?: { brand?: string; model: string; repairType: string }[];
 }) {
   return shell(
     `New booking — #PPR-${b.id}`,
@@ -218,8 +220,14 @@ export function staffNotificationHtml(b: {
         ${row("Customer", b.customerName)}
         ${row("Phone", b.phone)}
         ${row("Email", b.email || "—")}
-        ${row("Device", b.device)}
-        ${row("Repair", b.repairType)}
+        ${b.items?.length
+          ? b.items
+              .map(
+                (item) =>
+                  row("Repair", `${formatBookingDevice(item.brand, item.model)} — ${item.repairType}`),
+              )
+              .join("")
+          : `${row("Device", b.device)}${row("Repair", b.repairType)}`}
         ${row("Date", b.date)}
         ${row("Time", b.timeSlot)}
         ${b.notes ? row("Notes", b.notes) : ""}
