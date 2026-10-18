@@ -100,7 +100,7 @@ function parseClock(value: string): number | null {
 }
 
 /** The shop's opening window for a YYYY-MM-DD date, in local minutes. */
-function storeWindow(iso: string): { open: number; close: number } | null {
+function storeWindow(iso: string): { open: number; close: number; label: string } | null {
   const weekday = new Date(`${iso}T12:00:00`)
     .toLocaleDateString("en-US", { weekday: "long" })
     .toLowerCase();
@@ -109,21 +109,25 @@ function storeWindow(iso: string): { open: number; close: number } | null {
   const [openRaw, closeRaw] = row.h.split(/\s*[–—-]\s*/);
   const open = parseClock(openRaw ?? "");
   const close = parseClock(closeRaw ?? "");
-  return open == null || close == null ? null : { open, close };
+  return open == null || close == null ? null : { open, close, label: row.h };
 }
 
+type SlotStatus = "available" | "booked" | "passed" | "closed";
+
 /**
- * A slot is bookable only inside the shop's hours and, for today, at least 30
- * minutes from now. Without this, including today would expose past times.
+ * Distinguishes the three reasons a time cannot be selected. The UI used to
+ * render all of them as "booked", which made a closed Sunday look fully booked.
  */
-function isSlotBookable(iso: string, slot: string, now = new Date()): boolean {
+function slotStatus(iso: string, slot: string, taken: boolean, now = new Date()): SlotStatus {
   const window = storeWindow(iso);
-  if (!window) return false;
+  if (!window) return "closed";
   const [hour, minute] = slot.split(":").map(Number);
   const slotMinutes = hour * 60 + minute;
-  if (slotMinutes < window.open || slotMinutes >= window.close) return false;
-  if (iso !== localIso(now)) return true;
-  return slotMinutes >= now.getHours() * 60 + now.getMinutes() + 30;
+  if (slotMinutes < window.open || slotMinutes >= window.close) return "closed";
+  if (iso === localIso(now) && slotMinutes < now.getHours() * 60 + now.getMinutes() + 30) {
+    return "passed";
+  }
+  return taken ? "booked" : "available";
 }
 
 const sel = "border-burgundy bg-blush ring-2 ring-burgundy/20";
@@ -203,6 +207,24 @@ export default function Booking() {
     ["Everything look right?", "Review your repair visit, then confirm."],
   ][step];
   const now = new Date();
+  const todayIso = localIso(now);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const selectedWindow = date ? storeWindow(date) : null;
+  const slotRows = (slots ?? []).map((slot) => ({
+    ...slot,
+    status: slotStatus(date, slot.slot, !slot.available, now),
+  }));
+  const openWindowRows = slotRows.filter(
+    (slot) => slot.status === "available" || slot.status === "booked",
+  );
+  const noBookable =
+    Boolean(date) && !isFetching && slotRows.length > 0 &&
+    !slotRows.some((slot) => slot.status === "available");
+  const closedForToday =
+    date === todayIso && selectedWindow !== null && nowMinutes >= selectedWindow.close;
+  const fullyBooked =
+    openWindowRows.length > 0 && openWindowRows.every((slot) => slot.status === "booked");
+  const nextDay = days.find((day) => day.iso > date);
 
   return (
     <>
@@ -347,26 +369,54 @@ export default function Booking() {
                   </div>
                   {date && (
                     <>
-                      <p className="text-xs tracking-[0.2em] uppercase text-ink/45 mb-3">Check-in time</p>
+                      <p className="mb-1 text-xs tracking-[0.2em] uppercase text-ink/45">Check-in time</p>
+                      <p className="mb-3 text-[11px] leading-relaxed text-ink/40">
+                        Struck-through times are booked. Faded times are outside shop hours or have already passed.
+                      </p>
                       {isFetching ? <p className="text-ink/40 text-sm py-4">Checking availability…</p> : (
                         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
-                          {(slots ?? []).map((s) => {
-                            const bookable = s.available && isSlotBookable(date, s.slot, now);
+                          {slotRows.map((s) => {
+                            const bookable = s.status === "available";
+                            const stateClass = bookable
+                              ? slot === s.slot
+                                ? "border-burgundy bg-burgundy text-ivory font-semibold"
+                                : "border-ink/10 bg-white text-ink/60 hover:border-burgundy/40"
+                              : s.status === "booked"
+                                ? "border-ink/10 bg-white text-ink/35 line-through cursor-not-allowed"
+                                : "border-ink/10 bg-white text-ink/30 cursor-not-allowed";
                             return (
-                              <button key={s.slot} disabled={!bookable} onClick={() => setSlot(s.slot)}
-                                className={`py-3.5 rounded-2xl border text-sm transition-all duration-300 ${!bookable ? "opacity-30 line-through cursor-not-allowed border-ink/10 bg-white" : slot === s.slot ? "border-burgundy bg-burgundy text-ivory font-semibold" : "border-ink/10 bg-white text-ink/60 hover:border-burgundy/40"}`}>
+                              <button
+                                key={s.slot}
+                                disabled={!bookable}
+                                onClick={() => setSlot(s.slot)}
+                                aria-label={`${s.slot} — ${s.status}`}
+                                className={`py-3.5 rounded-2xl border text-sm transition-all duration-300 ${stateClass}`}
+                              >
                                 {s.slot}
                               </button>
                             );
                           })}
                         </div>
                       )}
-                      {!isFetching && (slots?.length ?? 0) > 0 &&
-                        (slots ?? []).every((s) => !s.available || !isSlotBookable(date, s.slot, now)) && (
-                          <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-[12.5px] leading-relaxed text-amber-800">
-                            No check-in times left for this day. Choose another day, or call {STORE.phone} if you need same-day help.
-                          </p>
-                        )}
+                      {noBookable && (
+                        <div className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-[12.5px] leading-relaxed text-amber-800">
+                          {closedForToday
+                            ? `We're closed for today. ${new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { weekday: "long" })} hours are ${selectedWindow?.label}.`
+                            : fullyBooked
+                              ? "Every remaining check-in time for this day is booked."
+                              : "No check-in times are left for this day."}
+                          {nextDay && (
+                            <button
+                              type="button"
+                              onClick={() => { setDate(nextDay.iso); setSlot(""); }}
+                              className="ml-1 font-semibold underline underline-offset-2 hover:text-amber-950"
+                            >
+                              Choose {nextDay.day} {nextDay.num} {nextDay.month}
+                            </button>
+                          )}
+                          {!nextDay && ` Call ${STORE.phone} for help.`}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
