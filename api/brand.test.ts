@@ -62,14 +62,14 @@ describe("Philly Phone Repair defaults", () => {
     expect(b.whatsapp).toBe("18143841507");
   });
 
-  it("keeps the original opening hours and schema.org output", () => {
+  it("keeps the current opening hours and schema.org output", () => {
     expect(schemaOpeningHours(readBrand().hours)).toEqual([
-      "Mo-Fr 09:00-19:00",
-      "Sa 10:00-18:00",
-      "Su 12:00-17:00",
+      "Mo-Th 09:00-19:00",
+      "Fr-Sa 10:00-22:00",
+      "Su 11:00-21:00",
     ]);
-    expect(compactHours(readBrand().hours)).toBe("Mon–Fri 9–7 · Sat 10–6 · Sun 12–5");
-    expect(longHours(readBrand().hours)).toBe("Mon–Fri 9AM–7PM · Sat 10AM–6PM · Sun 12PM–5PM");
+    expect(compactHours(readBrand().hours)).toBe("Mon–Thu 9–7 · Fri–Sat 10–10 · Sun 11–9");
+    expect(longHours(readBrand().hours)).toBe("Mon–Thu 9AM–7PM · Fri–Sat 10AM–10PM · Sun 11AM–9PM");
   });
 
   it("keeps the original palette", () => {

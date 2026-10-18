@@ -189,7 +189,7 @@ describe("slot availability", () => {
   it("marks every time slot available when the day is empty", async () => {
     mockedStore.bookingsByDate.mockResolvedValue([]);
     const slots = await caller().shop.slots({ date: "2026-02-01" });
-    expect(slots).toHaveLength(10);
+    expect(slots).toHaveLength(13);
     expect(slots.every((s) => s.available)).toBe(true);
   });
 

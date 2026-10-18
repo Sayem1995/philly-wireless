@@ -72,7 +72,7 @@ value has two accepted spellings. `readBrand()` prefers the server-side one:
 times separated by `|`, day ranges separated by `,`:
 
 ```
-BRAND_HOURS=Monday-Saturday|10 AM-10 PM;Sunday|11 AM-9 PM
+BRAND_HOURS=Monday-Thursday|9 AM-7 PM;Friday-Saturday|10 AM-10 PM;Sunday|11 AM-9 PM
 ```
 
 This feeds the footer summary, the contact page and the schema.org

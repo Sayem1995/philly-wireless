@@ -171,9 +171,9 @@ export interface StoreHours {
 }
 
 const DEFAULT_HOURS: StoreHours[] = [
-  { d: "Monday – Friday", h: "9:00 AM – 7:00 PM", days: ["monday", "tuesday", "wednesday", "thursday", "friday"] },
-  { d: "Saturday", h: "10:00 AM – 6:00 PM", days: ["saturday"] },
-  { d: "Sunday", h: "12:00 PM – 5:00 PM", days: ["sunday"] },
+  { d: "Monday – Thursday", h: "9:00 AM – 7:00 PM", days: ["monday", "tuesday", "wednesday", "thursday"] },
+  { d: "Friday – Saturday", h: "10:00 AM – 10:00 PM", days: ["friday", "saturday"] },
+  { d: "Sunday", h: "11:00 AM – 9:00 PM", days: ["sunday"] },
 ];
 
 /**
@@ -320,7 +320,7 @@ function shortDayLabel(label: string): string {
 }
 
 /**
- * One-line summary for the footer, e.g. `"Mon–Fri 9–7 · Sat 10–6 · Sun 12–5"`.
+ * One-line summary for the footer, e.g. `"Mon–Thu 9–7 · Fri–Sat 10–10 · Sun 11–9"`.
  * Derived from `BRAND_HOURS`, so a store with different hours shows its own.
  */
 export function compactHours(hours: StoreHours[]): string {
@@ -368,7 +368,7 @@ export function mapsEmbed(addressParts: {
   return `https://maps.google.com/maps?q=${encodeURIComponent(addressQuery(addressParts))}&output=embed`;
 }
 
-/** Full hours for display, e.g. `"Mon–Fri 9AM–7PM · Sat 10AM–6PM"`. */
+/** Full hours for display, e.g. `"Mon–Thu 9AM–7PM · Fri–Sat 10AM–10PM · Sun 11AM–9PM"`. */
 export function longHours(hours: StoreHours[]): string {
   return hours.map(({ d, h }) => `${shortDayLabel(d)} ${shortTime(h)}`).join(" · ");
 }

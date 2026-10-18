@@ -53,7 +53,7 @@ function Navbar() {
             </span>
             <span className="hidden lg:flex items-center gap-1.5 text-blush/50">
               <Clock size={11} />
-              Mon–Fri 9–7 · Sat 10–6
+              {compactHours(BRAND.hours)}
             </span>
           </div>
           <div className="flex items-center gap-4 whitespace-nowrap">
