@@ -28,7 +28,14 @@ Final verification after changes (2026-10-17): `npm run check` ✅,
 `npm run lint` ✅, **354 tests passed** across 25 files ✅, `npm run build` ✅.
 The only build warnings are the pre-existing Vite >500 kB chunk warning and the
 `import.meta` warning from `server/lib/vite.ts` under the CJS server bundle.
-No external Stripe/Firestore/email calls were made.
+No external Stripe/Firestore/email calls were made during the audit itself.
+
+**Live deployment (2026-10-17):** commit `68d4263` is deployed to
+https://philly-wireless.vercel.app and `/api/health` returns the new config
+shape. `onlineCard` is currently `false` because no Stripe key is configured in
+Vercel; pay-in-store checkout is live. The cron endpoint is deployed but returns
+503 until `CRON_SECRET` is set. Firestore rules still need `npm run
+deploy:rules` (or the Firebase console).
 
 ## 2. Confirmed defects fixed
 
@@ -190,6 +197,8 @@ delivery fee.
 - [ ] Firestore rules deployed: `npx firebase deploy --only firestore:rules`.
       `orders`, `orderIdempotency`, `receipts`, product images and CRM data are
       server-only.
+- [ ] `.vercelignore` is present so `api/**/*.test.ts` is not deployed as a
+      serverless function. (Without it the Hobby function limit is exceeded.)
 - [ ] Firebase Auth is configured; the intended staff UID is in
       `FIREBASE_ADMIN_UID`; unauthenticated `admin.*` calls return
       `Authentication required`.
@@ -290,6 +299,7 @@ delivery fee.
 | `src/pages/admin/Orders.tsx` | Search, test/config banners, safe cancel/refund/delete, reconciliation action |
 | `src/pages/OrderConfirmation.tsx` | Cancelled/expired states, no payment CTA on cancelled orders |
 | `.env.example`, `README.md`, `vercel.json`, `firestore.rules` | Configuration, cron, rules, docs |
+| `.vercelignore` | Keeps `api/**/*.test.ts` out of the Vercel function bundle (tests are not serverless endpoints) |
 | `api/*.test.ts` | Regression coverage (cart, contracts, checkout, webhook, reconciliation, refunds, tokens, rate limits, email isolation, auth) |
 
 ## 11. What was tested vs inspected
