@@ -3,16 +3,21 @@ import { trpc } from "@/providers/trpc";
 import Seo from "@/components/Seo";
 import Reveal from "@/components/Reveal";
 import AddToCartButton from "@/components/AddToCartButton";
+import ProductGridSkeleton from "@/components/ProductGridSkeleton";
+import ProductToolbar from "@/components/ProductToolbar";
 import { Smartphone, Tablet, BadgeCheck } from "lucide-react";
 import { STORE } from "@contracts/constants";
 import { productImageUrl } from "@/lib/productImages";
+import { filterProducts, sortProducts, type ProductSort } from "@/lib/productCatalog";
 
 const money = (c: number) => "$" + (c / 100).toFixed(c % 100 ? 2 : 0);
 
 export default function Devices() {
   const [tab, setTab] = useState<"device_new" | "device_refurb">("device_new");
-  const { data, isLoading } = trpc.shop.products.useQuery({ kind: tab });
+  const { data, isLoading, isError, refetch } = trpc.shop.products.useQuery({ kind: tab });
   const [sub, setSub] = useState("All");
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<ProductSort>("featured");
 
   // Categories come from the products themselves, so a new category typed into
   // the admin form (Samsung, Pixel, MacBook…) immediately becomes its own tab.
@@ -26,7 +31,17 @@ export default function Devices() {
   // selected. Derived rather than synced, so the filter falls back to "All" in
   // the same render instead of showing an empty grid first.
   const activeSub = subs.includes(sub) ? sub : "All";
-  const rows = (data ?? []).filter((p) => activeSub === "All" || p.subcategory === activeSub);
+  const rows = useMemo(
+    () =>
+      sortProducts(
+        filterProducts(
+          (data ?? []).filter((p) => activeSub === "All" || p.subcategory === activeSub),
+          query,
+        ),
+        sort,
+      ),
+    [activeSub, data, query, sort],
+  );
 
   return (
     <>
@@ -41,20 +56,48 @@ export default function Devices() {
       <section className="pb-24 max-w-6xl mx-auto px-5">
         <Reveal className="flex flex-wrap justify-center gap-2.5 mb-6">
           {([["device_new", "Brand New"], ["device_refurb", "Refurbished"]] as const).map(([k, l]) => (
-            <button key={k} onClick={() => setTab(k)}
+            <button key={k} onClick={() => setTab(k)} aria-pressed={tab === k}
               className={`px-7 py-3 rounded-full text-sm font-semibold border transition-all duration-300 hover:-translate-y-0.5 ${tab === k ? "bg-burgundy text-ivory border-burgundy" : "border-burgundy/20 text-ink/60 hover:border-burgundy/50"}`}>
               {l}
             </button>
           ))}
         </Reveal>
-        <Reveal className="flex flex-wrap justify-center gap-2 mb-12">
+        <Reveal className="flex flex-wrap justify-center gap-2 mb-8">
           {subs.map((s) => (
-            <button key={s} onClick={() => setSub(s)}
+            <button key={s} onClick={() => setSub(s)} aria-pressed={activeSub === s}
               className={`px-4 py-1.5 rounded-full text-[12.5px] border transition-colors ${activeSub === s ? "bg-ink text-ivory border-ink" : "border-ink/15 text-ink/50 hover:border-ink/40"}`}>{s}</button>
           ))}
         </Reveal>
+        <ProductToolbar
+          query={query}
+          onQuery={setQuery}
+          sort={sort}
+          onSort={setSort}
+          resultCount={rows.length}
+          label="devices"
+          placeholder="Search devices…"
+        />
         {isLoading ? (
-          <p className="text-center text-ink/40 py-16">Loading devices…</p>
+          <ProductGridSkeleton count={6} className="sm:grid-cols-2 lg:grid-cols-3 gap-6" />
+        ) : isError ? (
+          <div role="alert" className="rounded-3xl border border-burgundy/20 bg-white px-6 py-14 text-center">
+            <p className="font-serif text-2xl text-ink">We couldn’t load the devices.</p>
+            <p className="mt-2 text-sm text-ink/55">Check your connection and try again.</p>
+            <button onClick={() => void refetch()} className="mt-5 rounded-full bg-burgundy px-6 py-3 text-sm font-semibold text-ivory hover:bg-burgundy-dark">
+              Try again
+            </button>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-3xl border border-blush bg-white px-6 py-16 text-center">
+            <p className="font-serif text-2xl text-ink">No devices match that search.</p>
+            <p className="mt-2 text-sm text-ink/55">Try a different model or clear the filters.</p>
+            <button
+              onClick={() => { setQuery(""); setSub("All"); setSort("featured"); }}
+              className="mt-5 rounded-full border border-burgundy/25 px-6 py-3 text-sm font-semibold text-burgundy hover:bg-blush"
+            >
+              Clear filters
+            </button>
+          </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {rows.map((p, i) => {
