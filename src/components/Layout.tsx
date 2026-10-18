@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
-import { Menu, X, Phone, MapPin, Clock, MessageCircle, Facebook, Instagram, Twitter, ArrowUp, ShoppingBag } from "lucide-react";
+import { Menu, X, Phone, MapPin, Clock, MessageCircle, Facebook, Instagram, Twitter, ArrowUp, ShoppingBag, Wrench } from "lucide-react";
 import Logo from "./Logo";
 import CartDrawer from "./CartDrawer";
 import { STORE, BRAND } from "@contracts/constants";
@@ -10,16 +10,17 @@ import { useCart } from "@/providers/cart";
 import { toast } from "sonner";
 
 const NAV = [
-  { to: "/", label: "Home" },
-  { to: "/services", label: "Repair Services" },
+  { to: "/services", label: "Repairs" },
   { to: "/pricing", label: "Pricing" },
-  { to: "/devices", label: "Buy Devices" },
+  { to: "/devices", label: "Devices" },
   { to: "/accessories", label: "Accessories" },
-  { to: "/about", label: "About" },
-  { to: "/blog", label: "Blog" },
+  { to: "/about", label: "Our Story" },
+  { to: "/blog", label: "Journal" },
   { to: "/faq", label: "FAQ" },
-  { to: "/contact", label: "Contact" },
+  { to: "/contact", label: "Visit Us" },
 ];
+
+const MOBILE_NAV = [{ to: "/", label: "Home" }, ...NAV];
 
 function Navbar() {
   const [open, setOpen] = useState(false);
@@ -32,51 +33,149 @@ function Navbar() {
     return () => window.removeEventListener("scroll", fn);
   }, []);
   return (
-    <header className={`fixed top-0 inset-x-0 z-50 transition-all duration-500 ${scrolled ? "bg-ivory/90 backdrop-blur-lg shadow-[0_1px_0_rgba(127,29,29,0.08)]" : "bg-transparent"}`}>
-      <div className="max-w-7xl mx-auto px-5 h-[76px] flex items-center justify-between">
-        <Link to="/" aria-label={`${STORE.name} home`}><Logo /></Link>
-        <nav className="hidden lg:flex items-center gap-7" aria-label="Main navigation">
-          {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} onClick={() => setOpen(false)}
-              className={({ isActive }) =>
-                `text-[13px] tracking-wide font-medium transition-colors hover:text-burgundy ${isActive ? "text-burgundy" : "text-ink/60"}`}>
-              {n.label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="flex items-center gap-3">
-          <a href={STORE.phoneHref} className="hidden md:flex items-center gap-2 text-sm font-semibold text-burgundy hover:text-burgundy-dark transition-colors">
-            <Phone size={16} /> {STORE.phone}
-          </a>
-          <button
-            type="button"
-            onClick={openCart}
-            aria-label={count > 0 ? `Open cart, ${count} item${count === 1 ? "" : "s"}` : "Open cart"}
-            className="relative p-2 text-ink/70 hover:text-burgundy transition-colors"
-          >
-            <ShoppingBag size={21} />
-            {count > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-burgundy text-ivory text-[10px] font-semibold grid place-items-center leading-none">
-                {count > 9 ? "9+" : count}
-              </span>
-            )}
-          </button>
-          <Link to="/book" className="hidden sm:inline-flex bg-burgundy text-ivory text-sm font-semibold px-6 py-3 rounded-full hover:bg-burgundy-dark hover:-translate-y-0.5 hover:shadow-lg hover:shadow-burgundy/25 transition-all duration-300">
-            Book a Repair
-          </Link>
-          <button className="lg:hidden p-2 text-ink" onClick={() => setOpen(!open)} aria-label="Toggle menu">
-            {open ? <X size={24} /> : <Menu size={24} />}
-          </button>
+    <header className="fixed top-0 inset-x-0 z-50">
+      {/* Brand utility strip: the shop's address and phone, not another menu. */}
+      <div
+        className={`hidden md:block overflow-hidden bg-ink text-blush/70 transition-all duration-500 ${
+          scrolled ? "max-h-0 opacity-0" : "max-h-9 opacity-100"
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-5 h-9 flex items-center justify-between gap-4 text-[10.5px] tracking-[0.08em]">
+          <div className="flex items-center gap-4 whitespace-nowrap">
+            <span className="flex items-center gap-1.5">
+              <MapPin size={11} className="text-blush/60" />
+              {STORE.address}
+              <span className="text-blush/30">·</span>
+              {STORE.city}
+            </span>
+            <span className="hidden lg:flex items-center gap-1.5 text-blush/50">
+              <Clock size={11} />
+              Mon–Fri 9–7 · Sat 10–6
+            </span>
+          </div>
+          <div className="flex items-center gap-4 whitespace-nowrap">
+            <span className="hidden xl:inline text-blush/45">Same-day repairs · Walk-ins welcome</span>
+            <a href={STORE.phoneHref} className="flex items-center gap-1.5 text-blush/90 hover:text-ivory transition-colors">
+              <Phone size={11} />
+              {STORE.phone}
+            </a>
+          </div>
         </div>
       </div>
+
+      <div
+        className={`border-b transition-all duration-500 ${
+          scrolled
+            ? "border-blush bg-ivory/95 backdrop-blur-xl shadow-[0_10px_30px_-22px_rgba(43,26,24,0.45)]"
+            : "border-blush/70 bg-ivory/92 backdrop-blur-md"
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-5 h-[72px] flex items-center gap-5">
+          <Link to="/" aria-label={`${STORE.name} home`} className="shrink-0">
+            <Logo />
+          </Link>
+
+          <nav className="hidden xl:flex items-center gap-6 ml-4 border-l border-ink/10 pl-6" aria-label="Main navigation">
+            {NAV.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                onClick={() => setOpen(false)}
+                className={({ isActive }) =>
+                  `group relative py-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] transition-colors ${
+                    isActive ? "text-burgundy" : "text-ink/55 hover:text-ink"
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    {n.label}
+                    <span
+                      className={`absolute -bottom-0.5 left-0 h-px w-full origin-left bg-burgundy transition-transform duration-300 ${
+                        isActive ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"
+                      }`}
+                    />
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="ml-auto flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={openCart}
+              aria-label={count > 0 ? `Open cart, ${count} item${count === 1 ? "" : "s"}` : "Open cart"}
+              className="group inline-flex items-center gap-2 rounded-full border border-ink/10 bg-white/60 px-3 py-2 text-ink/70 transition-all hover:border-burgundy/30 hover:bg-white hover:text-burgundy"
+            >
+              <ShoppingBag size={17} />
+              <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.14em]">Bag</span>
+              {count > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-burgundy text-ivory text-[10px] font-semibold grid place-items-center leading-none">
+                  {count > 9 ? "9+" : count}
+                </span>
+              )}
+            </button>
+
+            <Link
+              to="/book"
+              className="hidden sm:inline-flex items-center gap-2 rounded-full bg-burgundy px-5 py-2.5 text-[12px] font-semibold text-ivory shadow-sm shadow-burgundy/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-burgundy-dark hover:shadow-md"
+            >
+              <Wrench size={14} />
+              Book a Repair
+            </Link>
+
+            <button
+              className="xl:hidden p-2 text-ink"
+              onClick={() => setOpen(!open)}
+              aria-label="Toggle menu"
+              aria-expanded={open}
+            >
+              {open ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
+        </div>
+      </div>
+
       {open && (
-        <nav className="lg:hidden bg-ivory border-t border-blush px-6 py-4 flex flex-col gap-1 shadow-xl" aria-label="Mobile navigation">
-          {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} onClick={() => setOpen(false)} className={({ isActive }) => `py-3 text-[15px] border-b border-blush/50 ${isActive ? "text-burgundy font-semibold" : "text-ink/70"}`}>
-              {n.label}
-            </NavLink>
-          ))}
-          <Link to="/book" onClick={() => setOpen(false)} className="mt-3 bg-burgundy text-ivory text-center font-semibold px-6 py-3.5 rounded-full">Book a Repair</Link>
+        <nav
+          className="xl:hidden max-h-[calc(100vh-72px)] overflow-y-auto border-t border-blush bg-ivory px-6 py-5 shadow-xl"
+          aria-label="Mobile navigation"
+        >
+          <div className="grid">
+            {MOBILE_NAV.map((n, i) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                onClick={() => setOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center justify-between border-b border-blush/60 py-3.5 text-[15px] ${
+                    isActive ? "text-burgundy font-semibold" : "text-ink/70"
+                  }`
+                }
+              >
+                <span>{n.label}</span>
+                <span className="font-mono text-[10px] tracking-[0.18em] text-ink/30">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+              </NavLink>
+            ))}
+          </div>
+          <div className="mt-5 flex gap-2">
+            <a
+              href={STORE.phoneHref}
+              className="flex flex-1 items-center justify-center gap-2 rounded-full border border-burgundy/25 px-5 py-3 text-sm font-semibold text-burgundy"
+            >
+              <Phone size={15} /> Call
+            </a>
+            <Link
+              to="/book"
+              onClick={() => setOpen(false)}
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-burgundy px-5 py-3 text-sm font-semibold text-ivory"
+            >
+              <Wrench size={15} /> Book a Repair
+            </Link>
+          </div>
         </nav>
       )}
     </header>
