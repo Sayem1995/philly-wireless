@@ -8,7 +8,7 @@ import {
   type OrderItemRow,
   type OrderRow,
 } from "./queries/store.js";
-import { TIME_SLOTS, STORE } from "../contracts/constants.js";
+import { TIME_SLOTS, DROP_OFF_SLOT, STORE } from "../contracts/constants.js";
 import { sendEmail, staffNotificationHtml } from "./email.js";
 import { notifyCustomer } from "./notifications.js";
 import { sendOrderEmails } from "./orderEmails.js";
@@ -424,12 +424,24 @@ export const shopRouter = createRouter({
         ),
     )
     .mutation(async ({ input }) => {
-      // conflict check
-      const clash = (await store.bookingsByDate(input.date)).find(
-        (b) => b.timeSlot === input.timeSlot && b.status !== "cancelled",
-      );
-      if (clash) {
-        throw new Error("That time slot was just taken — please pick another.");
+      const sameDay = await store.bookingsByDate(input.date);
+
+      if (input.timeSlot === DROP_OFF_SLOT) {
+        // Drop-offs do not occupy a timed bay, but cap the queue so a late
+        // request cannot create an unlimited same-day workload.
+        const dropOffs = sameDay.filter(
+          (b) => b.timeSlot === DROP_OFF_SLOT && b.status !== "cancelled",
+        );
+        if (dropOffs.length >= 3) {
+          throw new Error("Same-day drop-off is full — please call the shop.");
+        }
+      } else {
+        const clash = sameDay.find(
+          (b) => b.timeSlot === input.timeSlot && b.status !== "cancelled",
+        );
+        if (clash) {
+          throw new Error("That time slot was just taken — please pick another.");
+        }
       }
 
       const items = input.items?.length

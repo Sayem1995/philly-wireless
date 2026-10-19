@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { STORE, BRAND } from "../contracts/constants.js";
+import { STORE, BRAND, DROP_OFF_SLOT } from "../contracts/constants.js";
 import { longHours } from "../contracts/brand.js";
 import { formatBookingDevice } from "../contracts/booking.js";
 import { maskEmail } from "./lib/mask.js";
@@ -198,7 +198,7 @@ export function bookingConfirmationHtml(b: {
         ${row("Device", b.device)}
         ${row("Repair", b.repairType)}
         ${row("Date", pretty)}
-        ${row("Check-in time", b.timeSlot)}
+        ${row(b.timeSlot === DROP_OFF_SLOT ? "Arrival" : "Check-in time", b.timeSlot === DROP_OFF_SLOT ? "Drop-off before close" : b.timeSlot)}
       </table>
     </div>
     <p style="color:${C.muted};font-size:13px;line-height:1.7;margin:24px 0 0;">
@@ -229,7 +229,7 @@ export function staffNotificationHtml(b: {
               .join("")
           : `${row("Device", b.device)}${row("Repair", b.repairType)}`}
         ${row("Date", b.date)}
-        ${row("Time", b.timeSlot)}
+        ${row(b.timeSlot === DROP_OFF_SLOT ? "Arrival" : "Time", b.timeSlot === DROP_OFF_SLOT ? "Drop-off before close" : b.timeSlot)}
         ${b.notes ? row("Notes", b.notes) : ""}
       </table>
     </div>`,

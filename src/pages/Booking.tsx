@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import Seo from "@/components/Seo";
-import { BRAND, STORE } from "@contracts/constants";
+import { BRAND, DROP_OFF_SLOT, STORE } from "@contracts/constants";
 import { formatBookingDevice } from "@contracts/booking";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -225,6 +225,16 @@ export default function Booking() {
   const fullyBooked =
     openWindowRows.length > 0 && openWindowRows.every((slot) => slot.status === "booked");
   const nextDay = days.find((day) => day.iso > date);
+  const closingLabel = selectedWindow?.label.split(/\s*[–—-]\s*/)[1] ?? "";
+  const canDropOff =
+    Boolean(date) && date === todayIso && selectedWindow !== null &&
+    nowMinutes >= selectedWindow.open && nowMinutes < selectedWindow.close;
+  const slotLabel = slot === DROP_OFF_SLOT ? "Drop-off before close" : slot;
+
+  const requestDropOff = () => {
+    setSlot(DROP_OFF_SLOT);
+    setStep(6);
+  };
 
   return (
     <>
@@ -404,7 +414,21 @@ export default function Booking() {
                             ? `We're closed for today. ${new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { weekday: "long" })} hours are ${selectedWindow?.label}.`
                             : fullyBooked
                               ? "Every remaining check-in time for this day is booked."
-                              : "No check-in times are left for this day."}
+                              : "No timed check-ins are left for this day."}
+                          {canDropOff && (
+                            <div className="mt-3">
+                              <p>
+                                We're still open until {closingLabel}. Request a same-day drop-off and we'll take it in before close.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={requestDropOff}
+                                className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-burgundy px-4 py-2 text-[12px] font-semibold text-ivory transition-colors hover:bg-burgundy-dark"
+                              >
+                                Request same-day drop-off
+                              </button>
+                            </div>
+                          )}
                           {nextDay && (
                             <button
                               type="button"
@@ -414,7 +438,7 @@ export default function Booking() {
                               Choose {nextDay.day} {nextDay.num} {nextDay.month}
                             </button>
                           )}
-                          {!nextDay && ` Call ${STORE.phone} for help.`}
+                          {!nextDay && !canDropOff && ` Call ${STORE.phone} for help.`}
                         </div>
                       )}
                     </>
@@ -467,7 +491,7 @@ export default function Booking() {
                       {[
                         ["Store", `${STORE.address}, ${STORE.city}`],
                         ["Date", new Date(date + "T12:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })],
-                        ["Check-in time", slot],
+                        ["Arrival", slotLabel],
                         ["Name", form.name],
                         ["Phone", form.phone],
                         ["Email", form.email || "—"],
@@ -494,7 +518,7 @@ export default function Booking() {
                     className="w-24 h-24 rounded-full bg-burgundy text-ivory grid place-items-center mx-auto mb-8"><PartyPopper size={40} /></motion.div>
                   <h1 className="font-serif text-4xl text-ink mb-3">You're booked in!</h1>
                   <p className="text-ink/55 max-w-md mx-auto leading-relaxed">
-                    Confirmation <b className="text-burgundy">#PPR-{bookingId}</b> · {items.length} repair{items.length === 1 ? "" : "s"} · {new Date(date + "T12:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at {slot}.
+                    Confirmation <b className="text-burgundy">#PPR-{bookingId}</b> · {items.length} repair{items.length === 1 ? "" : "s"} · {new Date(date + "T12:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}{slot === DROP_OFF_SLOT ? " for a same-day drop-off" : ` at ${slot}`}.
                     We'll call <b>{form.phone}</b> within 15 minutes during business hours to confirm.
                   </p>
                   <div className="grid sm:grid-cols-3 gap-3 max-w-2xl mx-auto mt-10 text-left">

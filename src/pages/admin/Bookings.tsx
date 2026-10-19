@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
-import { BOOKING_STATUSES, TIME_SLOTS } from "@contracts/constants";
+import { BOOKING_STATUSES, DROP_OFF_SLOT, TIME_SLOTS } from "@contracts/constants";
 import { formatBookingDevice } from "@contracts/booking";
 import { toast } from "sonner";
 import { X, Send } from "lucide-react";
@@ -114,6 +114,7 @@ export default function Bookings() {
               <div>
                 <label className="block text-xs uppercase tracking-wider text-ink/45 mb-2">Time</label>
                 <select value={booking.timeSlot} onChange={(e) => update.mutate({ id: booking.id, timeSlot: e.target.value })} className={`${input} w-full`}>
+                  {booking.timeSlot === DROP_OFF_SLOT && <option value={DROP_OFF_SLOT}>Drop-off</option>}
                   {TIME_SLOTS.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </div>

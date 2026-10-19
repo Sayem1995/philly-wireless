@@ -334,6 +334,30 @@ describe("shop.book", () => {
     );
   });
 
+  it("accepts a same-day drop-off without occupying a timed slot", async () => {
+    mockedStore.bookingsByDate.mockResolvedValue([]);
+    mockedStore.customerByPhone.mockResolvedValue(undefined);
+    mockedStore.createCustomer.mockResolvedValue({
+      id: 7,
+      name: "Ada Lovelace",
+      phone: "2155550100",
+      email: "ada@example.com",
+      notes: null,
+      createdAt: new Date(),
+    } satisfies CustomerRow);
+    mockedStore.createBooking.mockResolvedValue(booking({ id: 46, timeSlot: "Drop-off" }));
+    mockedStore.addNotification.mockResolvedValue(undefined);
+
+    await expect(caller().shop.book({ ...input, timeSlot: "Drop-off" })).resolves.toEqual({
+      ok: true,
+      bookingId: 46,
+    });
+
+    expect(mockedStore.createBooking).toHaveBeenCalledWith(
+      expect.objectContaining({ timeSlot: "Drop-off" }),
+    );
+  });
+
   it("rejects a booking with no repair item", async () => {
     await expect(
       caller().shop.book({

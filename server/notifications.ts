@@ -1,7 +1,7 @@
 import { store } from "./queries/store.js";
 import { sendEmail } from "./email.js";
 import { sendSms } from "./sms.js";
-import { STORE, BRAND } from "../contracts/constants.js";
+import { STORE, BRAND, DROP_OFF_SLOT } from "../contracts/constants.js";
 import { formatBookingDevice } from "../contracts/booking.js";
 
 /**
@@ -89,14 +89,17 @@ function copyFor(
   b: NotifiableBooking,
 ): { subject: string; sms: string; html: string } {
   const first = (b.customerName || "there").split(" ")[0];
-  const when = `${prettyDate(b.date)} at ${b.timeSlot}`;
+  const when =
+    b.timeSlot === DROP_OFF_SLOT
+      ? `${prettyDate(b.date)} (same-day drop-off)`
+      : `${prettyDate(b.date)} at ${b.timeSlot}`;
   const shop = STORE.name;
 
   switch (kind) {
     case "received":
       return {
         subject: `Booking received ${REF(b.id)} — ${shop}`,
-        sms: `${shop}: Booking received for your ${b.device} (${b.repairType}) on ${prettyDate(b.date)} at ${b.timeSlot}. Ref ${REF(b.id)}. Questions? ${STORE.phone}`,
+        sms: `${shop}: Booking received for your ${b.device} (${b.repairType}) for ${when}. Ref ${REF(b.id)}. Questions? ${STORE.phone}`,
         html: shell(
           "We've got your booking",
           `<p style="color:${C.muted};font-size:14px;line-height:1.7;margin:0 0 16px;">Hi ${first}, thanks — your repair visit is booked. Here's what we have:</p>
@@ -160,7 +163,7 @@ function copyFor(
     case "rescheduled":
       return {
         subject: `Appointment moved ${REF(b.id)} — ${shop}`,
-        sms: `${shop}: Your appointment (${REF(b.id)}) is now ${prettyDate(b.date)} at ${b.timeSlot}. Any problem, call ${STORE.phone}.`,
+        sms: `${shop}: Your appointment (${REF(b.id)}) is now ${b.timeSlot === DROP_OFF_SLOT ? `${prettyDate(b.date)} as a drop-off` : `${prettyDate(b.date)} at ${b.timeSlot}`}. Any problem, call ${STORE.phone}.`,
         html: shell(
           "Your appointment has moved",
           `<p style="color:#8a7168;font-size:14px;line-height:1.7;margin:0;">Hi ${first}, your repair visit (${REF(b.id)}) is now scheduled for <strong>${when}</strong>. If that doesn't work, call us on ${STORE.phone}.</p>`,

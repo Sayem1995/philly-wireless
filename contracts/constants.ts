@@ -71,6 +71,9 @@ export const TIME_SLOTS = [
   "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00",
 ] as const;
 
+/** Used when a customer arrives before close but no timed check-in remains. */
+export const DROP_OFF_SLOT = "Drop-off";
+
 export const BOOKING_STATUSES = [
   "pending",
   "accepted",
