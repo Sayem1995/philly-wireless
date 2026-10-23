@@ -139,6 +139,11 @@ assistant is not connected. Browser speech support is best in Chrome/Edge;
 Safari support varies and Firefox has no speech recognition, so the text input
 is always available.
 
+Admins also get **Admin → AI Analyst**, an admin-only read-only chat over live
+inventory, parts, online orders and sales. Its tools cannot mutate stock,
+prices, orders or bookings, and customer contact details are omitted from
+recent-order results. It uses the same `DEEPSEEK_API_KEY`.
+
 ### Customer notifications (email + SMS)
 
 Customers are told about their repair on **every channel you hold for them** —

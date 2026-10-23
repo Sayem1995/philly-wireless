@@ -5,11 +5,12 @@ import Logo from "@/components/Logo";
 import { LOGIN_PATH } from "@/const";
 import {
   LayoutDashboard, CalendarCheck, Users, Package, Wrench,
-  Tag, BarChart3, LogOut, Store, ShoppingBag,
+  Tag, BarChart3, LogOut, Store, ShoppingBag, Sparkles,
 } from "lucide-react";
 
 const NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/admin/assistant", label: "AI Analyst", icon: Sparkles },
   { to: "/admin/bookings", label: "Bookings", icon: CalendarCheck },
   { to: "/admin/orders", label: "Orders", icon: ShoppingBag },
   { to: "/admin/customers", label: "Customers", icon: Users },

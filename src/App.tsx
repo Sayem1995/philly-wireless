@@ -20,6 +20,7 @@ import Receipt from "./pages/Receipt"
 import NotFound from "./pages/NotFound"
 import AdminLayout from "./pages/admin/AdminLayout"
 import Dashboard from "./pages/admin/Dashboard"
+import AdminAssistant from "./pages/admin/Assistant"
 import AdminBookings from "./pages/admin/Bookings"
 import AdminOrders from "./pages/admin/Orders"
 import AdminCustomers from "./pages/admin/Customers"
@@ -53,6 +54,7 @@ export default function App() {
       <Route path="/receipt/:token" element={<Receipt />} />
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Dashboard />} />
+        <Route path="assistant" element={<AdminAssistant />} />
         <Route path="bookings" element={<AdminBookings />} />
         <Route path="orders" element={<AdminOrders />} />
         <Route path="customers" element={<AdminCustomers />} />

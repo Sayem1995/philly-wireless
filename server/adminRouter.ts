@@ -6,6 +6,8 @@ import { createProductImage } from "./queries/productImages.js";
 import { sendEmail, receiptHtml, messageHtml } from "./email.js";
 import { sendSms } from "./sms.js";
 import { env } from "./lib/env.js";
+import { checkRateLimit, clientAddress } from "./lib/rateLimit.js";
+import { runAdminAssistant } from "./adminAssistant.js";
 import { STORE } from "../contracts/constants.js";
 import { IMAGE_MAX_DATA_CHARS, normalizeImageMime } from "../contracts/productImages.js";
 import {
@@ -76,6 +78,56 @@ export const adminRouter = createRouter({
       unreadMessages,
     };
   }),
+
+  /* ---------- AI operations analyst (admin-only) ---------- */
+  assistantStatus: adminQuery.query(() => ({
+    configured: Boolean(env.deepseekApiKey),
+  })),
+
+  assistant: adminQuery
+    .input(
+      z.object({
+        messages: z
+          .array(
+            z.object({
+              role: z.enum(["user", "assistant"]),
+              content: z.string().min(1).max(1200),
+            }),
+          )
+          .min(1)
+          .max(12),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const limit = checkRateLimit(
+        `admin-assistant:${clientAddress(ctx.req)}`,
+        40,
+        10 * 60 * 1000,
+      );
+      if (!limit.allowed) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many assistant requests — please wait a few minutes and try again.",
+        });
+      }
+
+      if (!env.deepseekApiKey) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "The admin AI analyst is not configured yet. Add DEEPSEEK_API_KEY in Vercel.",
+        });
+      }
+
+      try {
+        return await runAdminAssistant(input.messages);
+      } catch (err) {
+        console.error("[admin-assistant] request failed:", err);
+        throw new TRPCError({
+          code: "BAD_GATEWAY",
+          message: "The AI analyst couldn't answer just now. Please try again.",
+        });
+      }
+    }),
 
   /* ---------- bookings ---------- */
   bookings: adminQuery
