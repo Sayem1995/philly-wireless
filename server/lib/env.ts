@@ -72,6 +72,12 @@ export const env = {
   stripeSecretKey: optional("STRIPE_SECRET_KEY").trim(),
   stripeWebhookSecret: optional("STRIPE_WEBHOOK_SECRET").trim(),
 
+  // ── AI assistant (DeepSeek; optional) ─────────────────────────────
+  // Without a key the widget still offers call, WhatsApp and manual booking.
+  deepseekApiKey: optional("DEEPSEEK_API_KEY").trim(),
+  deepseekModel: optional("DEEPSEEK_MODEL").trim() || "deepseek-flash",
+  storeTimezone: optional("STORE_TIMEZONE").trim() || "America/New_York",
+
   // How long an unpaid card order holds its stock. Stripe Checkout sessions
   // must last at least 30 minutes; the order reservation is released only
   // after Stripe's own session has expired, so a late payment cannot arrive

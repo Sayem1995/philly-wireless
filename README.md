@@ -117,10 +117,27 @@ Server values must never use that prefix.
 | `SENDGRID_API_KEY` / `SENDGRID_FROM`                            | Email via SendGrid Web API (preferred)        |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Email via SMTP fallback                       |
 | `STAFF_EMAIL`                                                   | Recipient for new-booking notifications       |
+| `DEEPSEEK_API_KEY`                                              | Server-side AI assistant key (optional)       |
+| `DEEPSEEK_MODEL`                                                | DeepSeek model; defaults to `deepseek-flash`  |
+| `STORE_TIMEZONE`                                                | IANA timezone for assistant hours/cutoff      |
 
 When no email provider is configured, `sendEmail()` returns
 `{ delivered: false }` and the message is recorded in the CRM communication
 history instead — bookings still succeed.
+
+### AI assistant (DeepSeek)
+
+The floating **AI** button opens a chat and voice assistant. It uses DeepSeek
+for conversation and browser speech recognition/synthesis for voice, so no
+voice-platform subscription is required. The server tools only read live
+prices and booking availability; the assistant links to `/book` for the
+customer to confirm, and never creates a booking or takes card details.
+
+Add `DEEPSEEK_API_KEY` to the server environment (not `VITE_*`). Without it the
+widget still shows **Call**, **WhatsApp** and **Book** and explains that the AI
+assistant is not connected. Browser speech support is best in Chrome/Edge;
+Safari support varies and Firefox has no speech recognition, so the text input
+is always available.
 
 ### Customer notifications (email + SMS)
 

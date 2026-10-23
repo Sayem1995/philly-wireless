@@ -31,6 +31,7 @@ import {
   taxFor,
 } from "../contracts/orders.js";
 import { checkRateLimit, clientAddress } from "./lib/rateLimit.js";
+import { runAssistant } from "./assistant.js";
 
 /* ---------- online orders ---------- */
 
@@ -299,6 +300,48 @@ export const shopRouter = createRouter({
   prices: publicQuery.query(async () => {
     return store.prices();
   }),
+
+  /* ---------- AI assistant (DeepSeek) ---------- */
+  assistantStatus: publicQuery.query(() => ({
+    configured: Boolean(env.deepseekApiKey),
+  })),
+
+  assistant: publicQuery
+    .input(
+      z.object({
+        messages: z
+          .array(
+            z.object({
+              role: z.enum(["user", "assistant"]),
+              content: z.string().min(1).max(1200),
+            }),
+          )
+          .min(1)
+          .max(12),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      enforceRateLimit(ctx, "assistant:chat", 30);
+
+      if (!env.deepseekApiKey) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message:
+            "The AI assistant is not configured yet. Please call or WhatsApp us and we'll help right away.",
+        });
+      }
+
+      try {
+        return await runAssistant(input.messages);
+      } catch (err) {
+        console.error("[assistant] request failed:", err);
+        throw new TRPCError({
+          code: "BAD_GATEWAY",
+          message:
+            "The assistant couldn't answer just now. Please call or WhatsApp us and we'll help right away.",
+        });
+      }
+    }),
 
   /* ---------- products (devices + accessories) ---------- */
   products: publicQuery
