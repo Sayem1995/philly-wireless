@@ -139,10 +139,17 @@ assistant is not connected. Browser speech support is best in Chrome/Edge;
 Safari support varies and Firefox has no speech recognition, so the text input
 is always available.
 
-Admins also get **Admin → AI Analyst**, an admin-only read-only chat over live
-inventory, parts, online orders and sales. Its tools cannot mutate stock,
-prices, orders or bookings, and customer contact details are omitted from
-recent-order results. It uses the same `DEEPSEEK_API_KEY`.
+Admins also get **Admin → AI Analyst**, an admin-only chat over live inventory,
+bookings, customers, online orders, sales, receipts, pricing, messages and
+content. Customer contact details are omitted from tool results.
+
+The analyst can prepare five changes — part stock, booking status, order
+ready/completed, repair price, and an order staff note — but it cannot apply
+them. Each becomes a server-side proposal with a 15-minute expiry; the admin
+must click **Approve**, and the server re-reads the record and refuses if it
+changed. `assistantActions` is server-only in Firestore and is the audit trail.
+The analyst cannot access secrets, auth, payments/refunds, deletions or bulk
+edits. It uses the same `DEEPSEEK_API_KEY`.
 
 ### Customer notifications (email + SMS)
 

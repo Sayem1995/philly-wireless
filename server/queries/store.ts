@@ -40,6 +40,8 @@ export const COLLECTIONS = {
   /** One doc per checkout idempotency key; written in the same transaction as
    *  the order so a retried request cannot create (or reserve) twice. */
   orderIdempotency: "orderIdempotency",
+  /** Server-created AI proposals awaiting an explicit admin approval. */
+  assistantActions: "assistantActions",
 } as const;
 
 type Row = Record<string, unknown>;
@@ -321,6 +323,22 @@ export class StockError extends Error {}
 /** A lifecycle transition the server refuses (e.g. cancelling a paid order). */
 export class OrderStateError extends Error {}
 
+export type AssistantActionRow = {
+  id: number;
+  token: string;
+  adminUid: string;
+  kind: string;
+  targetId: number;
+  targetLabel: string;
+  summary: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  status: "pending" | "applied" | "cancelled" | "failed";
+  createdAt: Date;
+  expiresAt: string;
+  appliedAt: Date | null;
+};
+
 export type ReceiptRow = {
   id: number;
   /** Random capability token used for the customer's public view link. */
@@ -496,6 +514,27 @@ function mapPart(r: Row): PartRow {
     stock: Number(r.stock ?? 0),
     lowStockAt: Number(r.lowStockAt ?? 5),
     costCents: Number(r.costCents ?? 0),
+  };
+}
+
+function mapAssistantAction(r: Row): AssistantActionRow {
+  const rawStatus = String(r.status ?? "pending");
+  return {
+    id: Number(r.id),
+    token: String(r.token ?? ""),
+    adminUid: String(r.adminUid ?? ""),
+    kind: String(r.kind ?? ""),
+    targetId: Number(r.targetId ?? 0),
+    targetLabel: String(r.targetLabel ?? ""),
+    summary: String(r.summary ?? ""),
+    before: (r.before ?? {}) as Record<string, unknown>,
+    after: (r.after ?? {}) as Record<string, unknown>,
+    status: ["pending", "applied", "cancelled", "failed"].includes(rawStatus)
+      ? (rawStatus as AssistantActionRow["status"])
+      : "pending",
+    createdAt: toDate(r.createdAt) ?? new Date(),
+    expiresAt: String(r.expiresAt ?? ""),
+    appliedAt: toDate(r.appliedAt),
   };
 }
 
@@ -1212,5 +1251,32 @@ export const store = {
   /** Generic patch for non-financial admin edits (notes, method, status). */
   async updateOrder(id: number, data: Partial<OrderRow>): Promise<void> {
     await updateRow(COLLECTIONS.orders, id, data);
+  },
+
+  // AI proposals (created server-side; applied only by an authenticated admin)
+  async createAssistantAction(
+    data: Omit<AssistantActionRow, "id" | "token" | "createdAt" | "expiresAt" | "appliedAt" | "status">,
+  ): Promise<AssistantActionRow> {
+    const token = newCapabilityToken();
+    const row = await createRow(COLLECTIONS.assistantActions, {
+      ...data,
+      token,
+      status: "pending",
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      appliedAt: null,
+    });
+    return mapAssistantAction(row);
+  },
+  async assistantActionByToken(token: string): Promise<AssistantActionRow | undefined> {
+    if (!token) return undefined;
+    const rows = await queryWhere(COLLECTIONS.assistantActions, "token", token);
+    return rows.length ? mapAssistantAction(rows[0]) : undefined;
+  },
+  async updateAssistantAction(
+    id: number,
+    data: Partial<AssistantActionRow>,
+  ): Promise<void> {
+    await updateRow(COLLECTIONS.assistantActions, id, data);
   },
 };

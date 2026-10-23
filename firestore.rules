@@ -73,6 +73,11 @@ service cloud.firestore {
     match /receipts/{id} {
       allow read, write: if false;
     }
+    // AI proposals are server-only; approval goes through tRPC, never the
+    // browser SDK.
+    match /assistantActions/{id} {
+      allow read, write: if false;
+    }
     match /__counters/{id} {
       allow read, write: if false;
     }

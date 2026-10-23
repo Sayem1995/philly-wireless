@@ -8,6 +8,7 @@ import { sendSms } from "./sms.js";
 import { env } from "./lib/env.js";
 import { checkRateLimit, clientAddress } from "./lib/rateLimit.js";
 import { runAdminAssistant } from "./adminAssistant.js";
+import { applyAssistantAction } from "./adminActionApply.js";
 import { STORE } from "../contracts/constants.js";
 import { IMAGE_MAX_DATA_CHARS, normalizeImageMime } from "../contracts/productImages.js";
 import {
@@ -119,12 +120,37 @@ export const adminRouter = createRouter({
       }
 
       try {
-        return await runAdminAssistant(input.messages);
+        return await runAdminAssistant(input.messages, ctx.user.uid);
       } catch (err) {
         console.error("[admin-assistant] request failed:", err);
         throw new TRPCError({
           code: "BAD_GATEWAY",
           message: "The AI analyst couldn't answer just now. Please try again.",
+        });
+      }
+    }),
+
+  applyAssistantAction: adminQuery
+    .input(z.object({ token: z.string().min(10).max(200) }))
+    .mutation(async ({ input, ctx }) => {
+      const limit = checkRateLimit(
+        `admin-assistant-apply:${clientAddress(ctx.req)}`,
+        30,
+        10 * 60 * 1000,
+      );
+      if (!limit.allowed) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message: "Too many approvals — please wait a few minutes and try again.",
+        });
+      }
+
+      try {
+        return await applyAssistantAction(input.token, ctx.user.uid);
+      } catch (err) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: err instanceof Error ? err.message : "Could not apply that proposal.",
         });
       }
     }),

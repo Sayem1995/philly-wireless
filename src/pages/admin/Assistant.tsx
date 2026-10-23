@@ -1,19 +1,110 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, Bot, Loader2, Package, Send, Sparkles, TrendingUp,
+  AlertTriangle, Bot, Check, Loader2, Package, Send, Sparkles, TrendingUp, X,
 } from "lucide-react";
+import { toast } from "sonner";
 import Seo from "@/components/Seo";
 import { trpc } from "@/providers/trpc";
+
+type Proposal = {
+  token: string;
+  kind: string;
+  summary: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+};
 
 type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  proposals?: Proposal[];
 };
 
 const GREETING =
-  "Ask me about stock, low-stock parts, inventory value, online sales or recent orders. " +
-  "I read the live Firestore data and I’m read-only — I can’t change anything.";
+  "Ask me about bookings, customers, stock, inventory value, online sales, receipts, messages or content. " +
+  "I can prepare a change for your approval, but I won’t apply anything until you click Approve.";
+
+function ProposalCard({ proposal }: { proposal: Proposal }) {
+  const [state, setState] = useState<"pending" | "applied" | "dismissed">("pending");
+  const apply = trpc.admin.applyAssistantAction.useMutation();
+  const utils = trpc.useUtils();
+
+  const approve = async () => {
+    try {
+      await apply.mutateAsync({ token: proposal.token });
+      setState("applied");
+      void utils.invalidate();
+      toast.success("Approved and applied");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not apply the change.");
+    }
+  };
+
+  if (state === "dismissed") return null;
+
+  return (
+    <div className="rounded-xl border border-burgundy/25 bg-white p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-burgundy">
+            Approval needed
+          </p>
+          <p className="mt-1 text-[12.5px] font-semibold text-ink">{proposal.summary}</p>
+        </div>
+        <span className="rounded-full bg-blush px-2 py-0.5 text-[9px] uppercase tracking-wide text-burgundy">
+          {proposal.kind.replaceAll("_", " ")}
+        </span>
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+        <div className="rounded-lg bg-blush-light/60 px-2.5 py-2">
+          <p className="mb-1 text-[9px] uppercase tracking-wide text-ink/35">Current</p>
+          {Object.entries(proposal.before).map(([key, value]) => (
+            <p key={key} className="text-ink/60">
+              {key}: <span className="font-medium text-ink/80">{String(value) || "—"}</span>
+            </p>
+          ))}
+        </div>
+        <div className="rounded-lg bg-emerald-50 px-2.5 py-2">
+          <p className="mb-1 text-[9px] uppercase tracking-wide text-emerald-700/60">Proposed</p>
+          {Object.entries(proposal.after).map(([key, value]) => (
+            <p key={key} className="text-emerald-800/70">
+              {key}: <span className="font-semibold text-emerald-900">{String(value) || "—"}</span>
+            </p>
+          ))}
+        </div>
+      </div>
+
+      {state === "applied" ? (
+        <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+          <Check size={13} /> Applied
+        </p>
+      ) : (
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void approve()}
+            disabled={apply.isPending}
+            className="inline-flex items-center gap-1 rounded-full bg-burgundy px-3 py-1.5 text-[11px] font-semibold text-ivory transition-colors hover:bg-burgundy-dark disabled:opacity-50"
+          >
+            {apply.isPending ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+            Approve
+          </button>
+          <button
+            type="button"
+            onClick={() => setState("dismissed")}
+            disabled={apply.isPending}
+            className="inline-flex items-center gap-1 rounded-full border border-ink/10 px-3 py-1.5 text-[11px] font-medium text-ink/50 transition-colors hover:border-ink/25 hover:text-ink disabled:opacity-50"
+          >
+            <X size={12} /> Dismiss
+          </button>
+          <span className="ml-auto text-[9px] text-ink/30">Expires in 15 min</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function FormattedMessage({ text }: { text: string }) {
   return (
@@ -78,7 +169,12 @@ export default function AdminAssistant() {
       seq.current += 1;
       setMessages((current) => [
         ...current,
-        { id: `assistant-${seq.current}`, role: "assistant", content: result.reply },
+        {
+          id: `assistant-${seq.current}`,
+          role: "assistant",
+          content: result.reply,
+          proposals: result.proposals,
+        },
       ]);
     } catch (requestError) {
       const message = requestError instanceof Error
@@ -103,7 +199,7 @@ export default function AdminAssistant() {
           </p>
           <h1 className="font-serif text-3xl text-ink">Ask the shop</h1>
           <p className="mt-1 max-w-2xl text-sm text-ink/50">
-            Live answers about inventory, stock, online sales and recent orders. Read-only.
+            Live answers across inventory, bookings, customers, sales and messages. Changes need your approval.
           </p>
         </div>
         <button
@@ -167,13 +263,20 @@ export default function AdminAssistant() {
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`max-w-[90%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-[13px] leading-relaxed ${
-                  message.role === "user"
-                    ? "ml-auto bg-ink text-ivory"
-                    : "border border-blush bg-blush-light/40 text-ink/75"
-                }`}
+                className={`max-w-[92%] space-y-2 ${message.role === "user" ? "ml-auto" : ""}`}
               >
-                <FormattedMessage text={message.content} />
+                <div
+                  className={`whitespace-pre-wrap rounded-2xl px-4 py-3 text-[13px] leading-relaxed ${
+                    message.role === "user"
+                      ? "bg-ink text-ivory"
+                      : "border border-blush bg-blush-light/40 text-ink/75"
+                  }`}
+                >
+                  <FormattedMessage text={message.content} />
+                </div>
+                {message.proposals?.map((proposal) => (
+                  <ProposalCard key={proposal.token} proposal={proposal} />
+                ))}
               </div>
             ))}
             {assistant.isPending && (
@@ -219,7 +322,7 @@ export default function AdminAssistant() {
               </button>
             </div>
             <p className="mt-2 text-center text-[9.5px] text-ink/35">
-              Read-only analyst. Every figure comes from a live query; no stock or orders are changed.
+              Read-only unless you approve a proposal. Every figure comes from a live query.
             </p>
           </div>
         </section>
