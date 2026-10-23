@@ -60,7 +60,7 @@ const TOOLS = [
     function: {
       name: "get_sales_summary",
       description:
-        "Summarise online-shop sales for a period: paid revenue, order counts, average order value, unpaid/refunded orders, and best-selling items.",
+        "Summarise sales for a period: collected revenue (paid online orders + repair receipts), orders placed, unpaid/refunded amounts, average paid order, and best-selling items.",
       parameters: {
         type: "object",
         properties: {
@@ -197,8 +197,12 @@ async function executeTool(name: string, rawArguments: string): Promise<ToolResu
     const days = Math.min(365, Math.max(1, Math.round(requested)));
     const since = new Date(Date.now() - days * 864e5);
     const allOrders = await store.orders();
-    const orders = allOrders.filter((order) => order.createdAt >= since);
+    const orders = allOrders.filter(
+      (order) => order.createdAt >= since && order.status !== "cancelled",
+    );
     const paid = orders.filter((order) => order.paymentStatus === "paid");
+    const unpaid = orders.filter((order) => order.paymentStatus === "unpaid");
+    const refunded = orders.filter((order) => order.paymentStatus === "refunded");
     const receipts = (await store.receipts()).filter((receipt) => receipt.createdAt >= since);
 
     const itemTotals = new Map<string, { name: string; qty: number; revenueCents: number }>();
@@ -217,28 +221,32 @@ async function executeTool(name: string, rawArguments: string): Promise<ToolResu
 
     const onlineRevenueCents = paid.reduce((sum, order) => sum + order.totalCents, 0);
     const repairRevenueCents = receipts.reduce((sum, receipt) => sum + receipt.totalCents, 0);
+    const placedValueCents = orders.reduce((sum, order) => sum + order.totalCents, 0);
     return {
       periodDays: days,
       since: since.toISOString().slice(0, 10),
       online: {
-        orderCount: orders.length,
+        ordersPlacedCount: orders.length,
+        ordersPlacedValueCents: cents(placedValueCents),
         paidOrderCount: paid.length,
-        revenueCents: cents(onlineRevenueCents),
-        averageOrderCents: paid.length ? cents(onlineRevenueCents / paid.length) : 0,
-        unpaidOrderCount: orders.filter((order) => order.paymentStatus === "unpaid").length,
-        refundedOrderCount: orders.filter((order) => order.paymentStatus === "refunded").length,
+        collectedRevenueCents: cents(onlineRevenueCents),
+        averagePaidOrderCents: paid.length ? cents(onlineRevenueCents / paid.length) : 0,
+        unpaidOrderCount: unpaid.length,
+        unpaidValueCents: cents(unpaid.reduce((sum, order) => sum + order.totalCents, 0)),
+        refundedOrderCount: refunded.length,
+        refundedValueCents: cents(refunded.reduce((sum, order) => sum + order.totalCents, 0)),
       },
       repairs: {
         receiptCount: receipts.length,
-        revenueCents: cents(repairRevenueCents),
+        collectedRevenueCents: cents(repairRevenueCents),
         averageTicketCents: receipts.length ? cents(repairRevenueCents / receipts.length) : 0,
       },
-      combinedRevenueCents: cents(onlineRevenueCents + repairRevenueCents),
+      combinedCollectedCents: cents(onlineRevenueCents + repairRevenueCents),
       topItems: Array.from(itemTotals.values())
         .sort((a, b) => b.revenueCents - a.revenueCents)
         .slice(0, 8),
       note:
-        "Revenue is split into paid online orders and recorded repair receipts. Report both and the combined total; unpaid/refunded orders are not revenue. Repair receipts are only those recorded in the admin system.",
+        "Use collected revenue for money received: paid online orders + recorded repair receipts. Orders placed is a separate count/value and includes unpaid orders; cancelled orders are excluded. Unpaid and refunded amounts are not revenue.",
     };
   }
 
@@ -271,13 +279,23 @@ Rules:
 - Always use a tool for figures. Never estimate, invent or use stale numbers.
 - Currency is USD. Tool values are in cents; divide by 100 and format as dollars.
 - "Sales" has two streams: paid online-shop orders and recorded repair receipts. Report them separately, plus the combined total. Unpaid and refunded orders are not revenue. Repair receipts only include payments staff actually recorded in the admin system.
+- Use "collected" for paid money. Use "orders placed" for all non-cancelled orders, even when unpaid. If orders were placed but none are paid, say that clearly instead of implying there were no orders.
 - "Inventory" has two parts: repair parts valued at cost, and retail products valued at selling price. Do not combine their values without labelling them.
 - For low stock, use the part's lowStockAt threshold. For products, flag stock === 0 as out of stock.
 - Do not expose customer phone numbers or emails; recent-order results intentionally omit them.
 - You are read-only. Never claim to change stock, prices, orders, bookings or settings.
 - If a tool fails or no records match, say so plainly. Do not fill gaps with guesses.
-- Keep answers concise and useful: a short summary followed by a few bullet points, or a compact table when comparing rows.
-- Today is ${new Date().toISOString().slice(0, 10)}.`;
+
+Answer format:
+- Write plain English for a busy shop owner. No Markdown, no asterisks, no pipe tables, no headings.
+- Start with one direct sentence that answers the question.
+- Then up to four short lines beginning with "• ".
+- Put the most important number first. Keep dollar signs in front, e.g. $1,240.00.
+- Mention the period once, e.g. "In the last 30 days".
+- When useful, end with one concrete next step on its own line, e.g. "Open Orders to review the unpaid orders."
+- Do not repeat every field the tool returns; summarise what matters.
+
+Today is ${new Date().toISOString().slice(0, 10)}.`;
 }
 
 export async function runAdminAssistant(messages: AdminAssistantMessage[]): Promise<{ reply: string }> {

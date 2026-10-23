@@ -15,6 +15,20 @@ const GREETING =
   "Ask me about stock, low-stock parts, inventory value, online sales or recent orders. " +
   "I read the live Firestore data and I’m read-only — I can’t change anything.";
 
+function FormattedMessage({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+        part.startsWith("**") && part.endsWith("**") ? (
+          <strong key={index}>{part.slice(2, -2)}</strong>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
 const SUGGESTIONS = [
   { icon: AlertTriangle, label: "What parts are low in stock?" },
   { icon: Package, label: "What is my total inventory value?" },
@@ -159,7 +173,7 @@ export default function AdminAssistant() {
                     : "border border-blush bg-blush-light/40 text-ink/75"
                 }`}
               >
-                {message.content}
+                <FormattedMessage text={message.content} />
               </div>
             ))}
             {assistant.isPending && (
