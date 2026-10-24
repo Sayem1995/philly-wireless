@@ -55,26 +55,34 @@ export default function AdminLayout() {
   return (
     <div className="min-h-screen bg-[#FAF6F2] flex">
       <Seo title="Admin" noindex />
-      <aside className="w-60 shrink-0 bg-ink text-blush/80 flex flex-col fixed inset-y-0 max-lg:hidden">
-        <div className="p-5 border-b border-blush/10"><Logo light /></div>
-        <nav className="flex-1 p-3 space-y-1">
+      <aside className="relative w-60 shrink-0 overflow-hidden bg-[linear-gradient(180deg,#1C1110_0%,#261615_52%,#160D0C_100%)] text-blush/75 shadow-[inset_-1px_0_0_rgba(255,255,255,0.06),24px_0_60px_-30px_rgba(36,18,16,0.55)] before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(120%_60%_at_10%_0%,rgba(190,74,80,0.16),transparent_60%)] before:content-[''] flex flex-col fixed inset-y-0 max-lg:hidden">
+        <div className="relative z-10 p-5 border-b border-white/10"><Logo light /></div>
+        <nav className="relative z-10 flex-1 overflow-y-auto p-3 space-y-1.5">
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end as boolean | undefined}
-              className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors ${isActive ? "bg-burgundy text-ivory" : "hover:bg-white/5"}`}>
-              <n.icon size={17} /> {n.label}
+              className={({ isActive }) => `group relative flex items-center gap-3 rounded-2xl px-4 py-3 text-[13.5px] font-medium tracking-[0.01em] transition-all duration-300 ${
+                isActive
+                  ? "border border-white/15 bg-white/[0.09] text-ivory shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_28px_-12px_rgba(0,0,0,0.65)] backdrop-blur-xl after:absolute after:right-3.5 after:h-1.5 after:w-1.5 after:rounded-full after:bg-blush/90 after:shadow-[0_0_10px_rgba(247,225,222,0.55)] after:content-['']"
+                  : "border border-transparent text-blush/60 hover:border-white/10 hover:bg-white/[0.045] hover:text-blush"
+              }`}>
+              <n.icon size={17} className="shrink-0" /> {n.label}
             </NavLink>
           ))}
         </nav>
-        <div className="p-3 border-t border-blush/10 space-y-1">
-          <Link to="/" className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm hover:bg-white/5"><Store size={16} /> View Website</Link>
-          <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm hover:bg-white/5 text-left"><LogOut size={16} /> Sign Out</button>
+        <div className="relative z-10 p-3 border-t border-white/10 space-y-1">
+          <Link to="/" className="flex items-center gap-3 rounded-xl border border-transparent px-4 py-2.5 text-[13px] text-blush/55 transition-colors hover:border-white/10 hover:bg-white/[0.05] hover:text-ivory"><Store size={16} /> View Website</Link>
+          <button onClick={logout} className="flex w-full items-center gap-3 rounded-xl border border-transparent px-4 py-2.5 text-left text-[13px] text-blush/55 transition-colors hover:border-white/10 hover:bg-white/[0.05] hover:text-ivory"><LogOut size={16} /> Sign Out</button>
         </div>
       </aside>
       {/* mobile top nav */}
-      <div className="lg:hidden fixed top-0 inset-x-0 z-40 bg-ink text-blush px-4 py-3 flex gap-1 overflow-x-auto">
+      <div className="lg:hidden fixed top-0 inset-x-0 z-40 flex gap-1 overflow-x-auto border-b border-white/10 bg-[#1B1110]/95 px-4 py-3 text-blush/65 shadow-[0_12px_30px_-18px_rgba(24,12,10,0.8)] backdrop-blur-xl">
         {NAV.map((n) => (
           <NavLink key={n.to} to={n.to} end={n.end as boolean | undefined}
-            className={({ isActive }) => `px-3.5 py-2 rounded-full text-xs whitespace-nowrap ${isActive ? "bg-burgundy text-ivory" : ""}`}>
+            className={({ isActive }) => `whitespace-nowrap rounded-full border px-3.5 py-2 text-xs transition-colors ${
+              isActive
+                ? "border-white/15 bg-white/10 text-ivory shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] backdrop-blur-xl"
+                : "border-transparent text-blush/55 hover:bg-white/[0.05] hover:text-blush"
+            }`}>
             {n.label}
           </NavLink>
         ))}
