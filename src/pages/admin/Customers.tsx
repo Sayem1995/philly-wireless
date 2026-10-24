@@ -177,13 +177,23 @@ export default function Customers() {
                             {b.receipt.paymentMethod} · {b.receipt.paidAt}
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => openPayment(b)}
-                          className="rounded-full border border-burgundy/25 px-3 py-1.5 text-[11px] font-semibold text-burgundy transition-colors hover:bg-blush-light"
-                        >
-                          Edit payment
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/receipt/${b.receipt.token}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-full border border-ink/10 px-3 py-1.5 text-[11px] font-semibold text-ink/55 transition-colors hover:border-burgundy/25 hover:text-burgundy"
+                          >
+                            Receipt
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => openPayment(b)}
+                            className="rounded-full border border-burgundy/25 px-3 py-1.5 text-[11px] font-semibold text-burgundy transition-colors hover:bg-blush-light"
+                          >
+                            Edit payment
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex flex-wrap items-center justify-between gap-2">

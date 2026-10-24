@@ -3,6 +3,9 @@ import { trpc } from "@/providers/trpc";
 import Seo from "@/components/Seo";
 import Logo from "@/components/Logo";
 import { STORE } from "@contracts/constants";
+import { downloadReceiptPdf } from "@/lib/receiptPdf";
+import { Download, Printer } from "lucide-react";
+import { toast } from "sonner";
 
 function money(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -94,12 +97,29 @@ export default function Receipt() {
           </p>
         </div>
 
-        <div className="flex justify-center gap-3 mt-6 print:hidden">
-          <button onClick={() => window.print()}
-            className="bg-burgundy text-ivory text-sm font-semibold px-6 py-3 rounded-full hover:bg-burgundy-dark transition-colors">
-            Print / save as PDF
+        <div className="flex flex-wrap justify-center gap-3 mt-6 print:hidden">
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                downloadReceiptPdf(data);
+                toast.success("Receipt PDF downloaded");
+              } catch {
+                toast.error("Could not create the PDF. Try Print instead.");
+              }
+            }}
+            className="inline-flex items-center gap-2 bg-burgundy text-ivory text-sm font-semibold px-6 py-3 rounded-full hover:bg-burgundy-dark transition-colors"
+          >
+            <Download size={15} /> Download PDF
           </button>
-          <Link to="/" className="border border-burgundy/30 text-burgundy text-sm font-semibold px-6 py-3 rounded-full hover:bg-blush transition-colors">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-2 border border-burgundy/30 text-burgundy text-sm font-semibold px-6 py-3 rounded-full hover:bg-blush transition-colors"
+          >
+            <Printer size={15} /> Print receipt
+          </button>
+          <Link to="/" className="inline-flex items-center border border-ink/10 text-ink/55 text-sm font-semibold px-6 py-3 rounded-full hover:bg-white transition-colors">
             Done
           </Link>
         </div>
