@@ -55,7 +55,7 @@ export default function AdminLayout() {
   return (
     <div className="min-h-screen bg-[#FAF6F2] flex">
       <Seo title="Admin" noindex />
-      <aside className="relative w-60 shrink-0 overflow-hidden bg-[linear-gradient(180deg,#FFF7F6_0%,#FCEBEA_48%,#F9E1E1_100%)] text-ink/65 shadow-[inset_-1px_0_0_rgba(96,37,40,0.08),24px_0_60px_-34px_rgba(96,37,40,0.28)] before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(120%_60%_at_10%_0%,rgba(255,255,255,0.85),transparent_60%)] before:content-[''] flex flex-col fixed inset-y-0 max-lg:hidden">
+      <aside className="relative w-60 shrink-0 overflow-hidden bg-[linear-gradient(180deg,#FFF3F3_0%,#FAE9EB_46%,#F3D5D8_100%)] text-ink/65 shadow-[inset_-1px_0_0_rgba(96,37,40,0.08),24px_0_60px_-34px_rgba(96,37,40,0.28)] before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(120%_60%_at_10%_0%,rgba(255,255,255,0.85),transparent_60%)] before:content-[''] flex flex-col fixed inset-y-0 max-lg:hidden">
         <div className="relative z-10 p-5 border-b border-burgundy/10"><Logo /></div>
         <nav className="relative z-10 flex-1 overflow-y-auto p-3 space-y-1.5">
           {NAV.map((n) => (
@@ -75,7 +75,7 @@ export default function AdminLayout() {
         </div>
       </aside>
       {/* mobile top nav */}
-      <div className="lg:hidden fixed top-0 inset-x-0 z-40 flex gap-1 overflow-x-auto border-b border-burgundy/10 bg-[#FFF7F6]/95 px-4 py-3 text-ink/60 shadow-[0_12px_30px_-22px_rgba(96,37,40,0.45)] backdrop-blur-xl">
+      <div className="lg:hidden fixed top-0 inset-x-0 z-40 flex gap-1 overflow-x-auto border-b border-burgundy/10 bg-[#FAE9EB]/95 px-4 py-3 text-ink/60 shadow-[0_12px_30px_-22px_rgba(96,37,40,0.45)] backdrop-blur-xl">
         {NAV.map((n) => (
           <NavLink key={n.to} to={n.to} end={n.end as boolean | undefined}
             className={({ isActive }) => `whitespace-nowrap rounded-full border px-3.5 py-2 text-xs transition-colors ${
