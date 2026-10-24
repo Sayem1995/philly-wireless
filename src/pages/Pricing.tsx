@@ -4,6 +4,7 @@ import Seo from "@/components/Seo";
 import Reveal from "@/components/Reveal";
 import { Link } from "react-router";
 import { STORE } from "@contracts/constants";
+import ModelPriceLookup from "@/components/ModelPriceLookup";
 
 /** Friendly names for known categories; unknown ones fall back to the raw key. */
 const CATEGORY_LABELS: Record<string, string> = {
@@ -78,6 +79,9 @@ export default function Pricing() {
             ))}
           </Reveal>
         )}
+        <Reveal className="mb-8">
+          <ModelPriceLookup />
+        </Reveal>
         <Reveal className="bg-white rounded-3xl border border-blush overflow-hidden shadow-sm">
           {isLoading ? (
             <p className="p-14 text-center text-ink/40">Loading pricing…</p>

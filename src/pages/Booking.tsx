@@ -4,6 +4,7 @@ import Seo from "@/components/Seo";
 import { BRAND, DROP_OFF_SLOT, STORE } from "@contracts/constants";
 import { formatBookingDevice } from "@contracts/booking";
 import { BOOKING_MODELS } from "@contracts/deviceModels";
+import { estimateRepair, REPAIR_ESTIMATE_NOTE } from "@contracts/repairEstimates";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Tablet, Laptop, Gamepad2, Battery, Plug, Layers, Camera,
@@ -198,6 +199,9 @@ export default function Booking() {
     ["Where can we reach you?", "We'll text or call to confirm within 15 minutes."],
     ["Everything look right?", "Review your repair visit, then confirm."],
   ][step];
+  const selectedEstimate = problem
+    ? estimateRepair(devType, brand, model, problem)
+    : null;
   const now = new Date();
   const todayIso = localIso(now);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -257,13 +261,30 @@ export default function Booking() {
               {/* 0 — problem */}
               {step === 3 && (
                 <div className="grid sm:grid-cols-2 gap-3">
-                  {PROBLEMS.map((p) => (
-                    <button key={p.id} onClick={() => setProblem(p.id)}
-                      className={`flex items-center gap-4 p-5 rounded-2xl border bg-white text-left transition-all duration-300 ${problem === p.id ? sel : card}`}>
-                      <span className={`w-11 h-11 rounded-xl grid place-items-center shrink-0 ${problem === p.id ? "bg-burgundy text-ivory" : "bg-blush text-burgundy"}`}><p.icon size={20} /></span>
-                      <span><span className="block font-semibold text-[15px]">{p.id}</span><span className="block text-[12.5px] text-ink/45 mt-0.5">{p.desc}</span></span>
-                    </button>
-                  ))}
+                  {PROBLEMS.map((p) => {
+                    const estimate = estimateRepair(devType, brand, model, p.id);
+                    return (
+                      <button key={p.id} onClick={() => setProblem(p.id)}
+                        className={`flex items-center gap-4 p-5 rounded-2xl border bg-white text-left transition-all duration-300 ${problem === p.id ? sel : card}`}>
+                        <span className={`w-11 h-11 rounded-xl grid place-items-center shrink-0 ${problem === p.id ? "bg-burgundy text-ivory" : "bg-blush text-burgundy"}`}><p.icon size={20} /></span>
+                        <span className="min-w-0">
+                          <span className="block font-semibold text-[15px]">{p.id}</span>
+                          <span className="block text-[12.5px] text-ink/45 mt-0.5">{p.desc}</span>
+                          {estimate && (
+                            <span className="mt-1.5 block text-[12px] font-semibold text-burgundy">
+                              {estimate.label}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {selectedEstimate && (
+                    <p className="sm:col-span-2 rounded-2xl bg-blush-light/70 px-4 py-3 text-[12px] text-ink/55">
+                      Selected estimate: <span className="font-semibold text-burgundy">{selectedEstimate.label}</span>
+                      {" · "}{REPAIR_ESTIMATE_NOTE}
+                    </p>
+                  )}
                   {items.length >= MAX_ITEMS && (
                     <p className="sm:col-span-2 rounded-2xl bg-amber-50 px-4 py-3 text-[12.5px] text-amber-800">
                       You have reached the {MAX_ITEMS}-repair limit for one booking. Call {STORE.phone} if you need a larger drop-off.
@@ -340,25 +361,36 @@ export default function Booking() {
               {step === 4 && (
                 <div>
                   <div className="space-y-3">
-                    {items.map((item, index) => (
-                      <div key={`${item.model}-${item.repairType}-${index}`} className="flex items-start gap-4 rounded-2xl border border-blush bg-white p-5">
-                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blush text-burgundy">
-                          {item.deviceType === "Tablet" ? <Tablet size={20} /> : item.deviceType === "Laptop" ? <Laptop size={20} /> : item.deviceType === "Console" ? <Gamepad2 size={20} /> : <Smartphone size={20} />}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-[15px] text-ink">{formatBookingDevice(item.brand, item.model)}</p>
-                          <p className="mt-0.5 text-[13px] text-burgundy">{item.repairType}</p>
+                    {items.map((item, index) => {
+                      const estimate = estimateRepair(
+                        item.deviceType,
+                        item.brand,
+                        item.model,
+                        item.repairType,
+                      );
+                      return (
+                        <div key={`${item.model}-${item.repairType}-${index}`} className="flex items-start gap-4 rounded-2xl border border-blush bg-white p-5">
+                          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blush text-burgundy">
+                            {item.deviceType === "Tablet" ? <Tablet size={20} /> : item.deviceType === "Laptop" ? <Laptop size={20} /> : item.deviceType === "Console" ? <Gamepad2 size={20} /> : <Smartphone size={20} />}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-[15px] text-ink">{formatBookingDevice(item.brand, item.model)}</p>
+                            <p className="mt-0.5 text-[13px] text-burgundy">{item.repairType}</p>
+                            {estimate && (
+                              <p className="mt-1 text-[12px] font-semibold text-ink/50">{estimate.label}</p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setItems((current) => current.filter((_, i) => i !== index))}
+                            aria-label={`Remove ${item.model} ${item.repairType} from booking`}
+                            className="rounded-full p-2 text-ink/30 transition-colors hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setItems((current) => current.filter((_, i) => i !== index))}
-                          aria-label={`Remove ${item.model} ${item.repairType} from booking`}
-                          className="rounded-full p-2 text-ink/30 transition-colors hover:bg-red-50 hover:text-red-600"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {items.length < MAX_ITEMS ? (
@@ -492,18 +524,32 @@ export default function Booking() {
                         <button onClick={() => setStep(4)} className="shrink-0 text-xs text-ink/40 hover:text-burgundy underline underline-offset-2">Edit</button>
                       </div>
                       <ul className="mt-5 space-y-3">
-                        {items.map((item, index) => (
-                          <li key={`${item.model}-${item.repairType}-${index}`} className="flex items-start gap-3 rounded-2xl bg-blush-light/70 px-4 py-3">
-                            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ivory text-burgundy">
-                              {item.deviceType === "Tablet" ? <Tablet size={16} /> : item.deviceType === "Laptop" ? <Laptop size={16} /> : item.deviceType === "Console" ? <Gamepad2 size={16} /> : <Smartphone size={16} />}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block text-[13.5px] font-semibold text-ink">{formatBookingDevice(item.brand, item.model)}</span>
-                              <span className="block text-[12.5px] text-burgundy">{item.repairType}</span>
-                            </span>
-                          </li>
-                        ))}
+                        {items.map((item, index) => {
+                          const estimate = estimateRepair(
+                            item.deviceType,
+                            item.brand,
+                            item.model,
+                            item.repairType,
+                          );
+                          return (
+                            <li key={`${item.model}-${item.repairType}-${index}`} className="flex items-start gap-3 rounded-2xl bg-blush-light/70 px-4 py-3">
+                              <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ivory text-burgundy">
+                                {item.deviceType === "Tablet" ? <Tablet size={16} /> : item.deviceType === "Laptop" ? <Laptop size={16} /> : item.deviceType === "Console" ? <Gamepad2 size={16} /> : <Smartphone size={16} />}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block text-[13.5px] font-semibold text-ink">{formatBookingDevice(item.brand, item.model)}</span>
+                                <span className="block text-[12.5px] text-burgundy">{item.repairType}</span>
+                                {estimate && (
+                                  <span className="block text-[11.5px] font-medium text-ink/45">{estimate.label}</span>
+                                )}
+                              </span>
+                            </li>
+                          );
+                        })}
                       </ul>
+                      <p className="mt-4 text-[11.5px] leading-relaxed text-ink/40">
+                        Shown prices are market-based starting estimates. {REPAIR_ESTIMATE_NOTE}
+                      </p>
                     </div>
                     <dl className="p-7 text-sm space-y-3.5">
                       {[
