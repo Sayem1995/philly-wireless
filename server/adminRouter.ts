@@ -341,6 +341,33 @@ export const adminRouter = createRouter({
       return { ok: true, id: receipt.id, totalCents, emailed, url };
     }),
 
+  /** Correct the amount/method/date on an existing repair receipt. */
+  updateReceipt: adminQuery
+    .input(
+      z.object({
+        id: z.number(),
+        amountCents: z.number().int().min(1).max(10_000_000),
+        paymentMethod: z.enum(["cash", "card", "zelle", "check", "other"]),
+        paidAt: z.string().min(8).optional(),
+        notes: z.string().max(600).optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const receipt = (await store.receipts()).find((row) => row.id === input.id);
+      if (!receipt) throw new Error("Receipt not found.");
+      const description = receipt.lines[0]?.description || "Repair payment";
+      await store.updateReceipt(input.id, {
+        lines: [{ description, amountCents: input.amountCents }],
+        subtotalCents: input.amountCents,
+        taxCents: 0,
+        totalCents: input.amountCents,
+        paymentMethod: input.paymentMethod,
+        paidAt: input.paidAt || receipt.paidAt,
+        notes: input.notes?.trim() || receipt.notes,
+      });
+      return { ok: true, totalCents: input.amountCents };
+    }),
+
   deleteReceipt: adminQuery
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
@@ -744,9 +771,24 @@ export const adminRouter = createRouter({
       }
       const history = await store.bookingsByCustomer(input.id);
       history.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const receipts = await store.receipts();
+      const receiptByBooking = new Map<number, (typeof receipts)[number]>();
+      for (const receipt of receipts) {
+        if (receipt.bookingId !== null && !receiptByBooking.has(receipt.bookingId)) {
+          receiptByBooking.set(receipt.bookingId, receipt);
+        }
+      }
       const notes = await store.customerNotes(input.id);
       const comms = await store.notifications(input.id);
-      return { customer, history, notes, comms };
+      return {
+        customer,
+        history: history.map((booking) => ({
+          ...booking,
+          receipt: receiptByBooking.get(booking.id) ?? null,
+        })),
+        notes,
+        comms,
+      };
     }),
 
   upsertCustomer: adminQuery

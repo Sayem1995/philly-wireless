@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { toast } from "sonner";
-import { Search, Plus, X, Trash2, Send } from "lucide-react";
+import { Banknote, Search, Plus, X, Trash2, Send } from "lucide-react";
+
+type PaymentMethod = "cash" | "card" | "zelle" | "check" | "other";
+
+function money(cents: number) {
+  return `$${(cents / 100).toFixed(2)}`;
+}
 
 export default function Customers() {
   const [q, setQ] = useState("");
@@ -9,6 +15,10 @@ export default function Customers() {
   const [editing, setEditing] = useState<{ id?: number; name: string; phone: string; email: string; notes: string } | null>(null);
   const [newNote, setNewNote] = useState("");
   const [msg, setMsg] = useState("");
+  const [payingBookingId, setPayingBookingId] = useState<number | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState<PaymentMethod>("cash");
+  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
   const utils = trpc.useUtils();
   const { data } = trpc.admin.customers.useQuery({ q });
   const { data: detail } = trpc.admin.customerDetail.useQuery({ id: sel! }, { enabled: sel !== null });
@@ -24,7 +34,63 @@ export default function Customers() {
   const notify = trpc.admin.notify.useMutation({
     onSuccess: () => { utils.admin.customerDetail.invalidate(); setMsg(""); toast.success("Message logged & sent"); },
   });
+  const createPayment = trpc.admin.createReceipt.useMutation({
+    onSuccess: () => {
+      void utils.admin.customerDetail.invalidate();
+      void utils.admin.receipts.invalidate();
+      setPayingBookingId(null);
+      toast.success("Payment recorded");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const updatePayment = trpc.admin.updateReceipt.useMutation({
+    onSuccess: () => {
+      void utils.admin.customerDetail.invalidate();
+      void utils.admin.receipts.invalidate();
+      setPayingBookingId(null);
+      toast.success("Payment updated");
+    },
+    onError: (error) => toast.error(error.message),
+  });
   const input = "border border-ink/15 rounded-xl px-3.5 py-2.5 text-sm bg-ivory focus:outline-none focus:border-burgundy w-full";
+  const totalPaidCents = (detail?.history ?? []).reduce(
+    (sum, booking) => sum + (booking.receipt?.totalCents ?? 0),
+    0,
+  );
+  const paidRepairs = (detail?.history ?? []).filter((booking) => booking.receipt).length;
+
+  type HistoryRow = NonNullable<typeof detail>["history"][number];
+
+  const openPayment = (booking: HistoryRow) => {
+    setPayingBookingId(booking.id);
+    setPayAmount(booking.receipt ? (booking.receipt.totalCents / 100).toFixed(2) : "");
+    setPayMethod((booking.receipt?.paymentMethod as PaymentMethod) ?? "cash");
+    setPayDate(booking.receipt?.paidAt || new Date().toISOString().slice(0, 10));
+  };
+
+  const savePayment = (booking: HistoryRow) => {
+    const amountCents = Math.round(Number(payAmount) * 100);
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+      toast.error("Enter a paid amount greater than zero.");
+      return;
+    }
+    if (booking.receipt) {
+      updatePayment.mutate({
+        id: booking.receipt.id,
+        amountCents,
+        paymentMethod: payMethod,
+        paidAt: payDate,
+      });
+    } else {
+      createPayment.mutate({
+        bookingId: booking.id,
+        lines: [{ description: `Repair payment — ${booking.device}`, amountCents }],
+        paymentMethod: payMethod,
+        paidAt: payDate,
+        emailCustomer: false,
+      });
+    }
+  };
 
   return (
     <div>
@@ -86,7 +152,13 @@ export default function Customers() {
                 <button onClick={() => setSel(null)} aria-label="Close"><X size={22} className="text-ink/40 hover:text-burgundy" /></button>
               </div>
             </div>
-            <p className="text-sm text-ink/55 mb-6">{detail.customer.phone} · {detail.customer.email ?? "no email"}</p>
+            <p className="text-sm text-ink/55 mb-2">{detail.customer.phone} · {detail.customer.email ?? "no email"}</p>
+            <p className="mb-6 flex items-center gap-1.5 text-xs text-ink/50">
+              <Banknote size={13} className="text-emerald-700" />
+              {totalPaidCents > 0
+                ? `${money(totalPaidCents)} paid across ${paidRepairs} repair${paidRepairs === 1 ? "" : "s"}`
+                : "No repair payments recorded yet"}
+            </p>
 
             <h3 className="font-serif text-lg mb-3">Repair history</h3>
             <div className="space-y-2.5 mb-7">
@@ -95,6 +167,103 @@ export default function Customers() {
                   <div className="flex justify-between"><span className="font-medium">{b.device} — {b.repairType}</span><span className="text-xs text-ink/45">#{b.id}</span></div>
                   <p className="text-xs text-ink/45 mt-1">{b.date} {b.timeSlot} · {b.status.replace("_", " ")} {b.priceEstimate ? `· ${b.priceEstimate}` : ""}</p>
                   {b.warrantyUntil && <p className="text-xs text-emerald-700 mt-1">Warranty until {b.warrantyUntil}</p>}
+
+                  <div className="mt-3 border-t border-blush/60 pt-3">
+                    {b.receipt ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[13px] font-semibold text-emerald-800">Paid {money(b.receipt.totalCents)}</p>
+                          <p className="mt-0.5 text-[10.5px] capitalize text-ink/40">
+                            {b.receipt.paymentMethod} · {b.receipt.paidAt}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openPayment(b)}
+                          className="rounded-full border border-burgundy/25 px-3 py-1.5 text-[11px] font-semibold text-burgundy transition-colors hover:bg-blush-light"
+                        >
+                          Edit payment
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11.5px] text-ink/40">No payment recorded</p>
+                        <button
+                          type="button"
+                          onClick={() => openPayment(b)}
+                          className="inline-flex items-center gap-1 rounded-full bg-burgundy px-3 py-1.5 text-[11px] font-semibold text-ivory transition-colors hover:bg-burgundy-dark"
+                        >
+                          <Banknote size={12} /> Record payment
+                        </button>
+                      </div>
+                    )}
+
+                    {payingBookingId === b.id && (
+                      <div className="mt-3 rounded-xl border border-burgundy/15 bg-blush-light/40 p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-burgundy">
+                          {b.receipt ? "Update paid amount" : "Record paid amount"}
+                        </p>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <label className="text-[10px] text-ink/45">
+                            Amount
+                            <div className="relative mt-1">
+                              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-ink/35">$</span>
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                inputMode="decimal"
+                                value={payAmount}
+                                onChange={(event) => setPayAmount(event.target.value)}
+                                placeholder="0.00"
+                                className="w-full rounded-lg border border-ink/15 bg-white py-2 pl-6 pr-2.5 text-xs outline-none focus:border-burgundy"
+                              />
+                            </div>
+                          </label>
+                          <label className="text-[10px] text-ink/45">
+                            Method
+                            <select
+                              value={payMethod}
+                              onChange={(event) => setPayMethod(event.target.value as PaymentMethod)}
+                              className="mt-1 w-full rounded-lg border border-ink/15 bg-white px-2 py-2 text-xs capitalize outline-none focus:border-burgundy"
+                            >
+                              <option value="cash">Cash</option>
+                              <option value="card">Card</option>
+                              <option value="zelle">Zelle</option>
+                              <option value="check">Check</option>
+                              <option value="other">Other</option>
+                            </select>
+                          </label>
+                          <label className="col-span-2 text-[10px] text-ink/45">
+                            Paid date
+                            <input
+                              type="date"
+                              value={payDate}
+                              onChange={(event) => setPayDate(event.target.value)}
+                              className="mt-1 w-full rounded-lg border border-ink/15 bg-white px-2 py-2 text-xs outline-none focus:border-burgundy"
+                            />
+                          </label>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={createPayment.isPending || updatePayment.isPending}
+                            onClick={() => savePayment(b)}
+                            className="rounded-full bg-burgundy px-3 py-1.5 text-[11px] font-semibold text-ivory transition-colors hover:bg-burgundy-dark disabled:opacity-50"
+                          >
+                            {createPayment.isPending || updatePayment.isPending ? "Saving…" : "Save payment"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPayingBookingId(null)}
+                            className="rounded-full border border-ink/10 px-3 py-1.5 text-[11px] text-ink/50 hover:border-ink/25 hover:text-ink"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
               {detail.history.length === 0 && <p className="text-sm text-ink/40">No repairs yet.</p>}

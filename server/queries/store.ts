@@ -914,6 +914,9 @@ export const store = {
     const rows = await queryWhere(COLLECTIONS.receipts, "bookingId", bookingId);
     return rows.length ? mapReceipt(rows[0]) : undefined;
   },
+  async updateReceipt(id: number, data: Partial<ReceiptRow>): Promise<void> {
+    await updateRow(COLLECTIONS.receipts, id, data);
+  },
   async deleteReceipt(id: number): Promise<void> {
     await deleteRow(COLLECTIONS.receipts, id);
   },
