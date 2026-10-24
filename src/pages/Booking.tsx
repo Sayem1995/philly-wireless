@@ -3,6 +3,7 @@ import { trpc } from "@/providers/trpc";
 import Seo from "@/components/Seo";
 import { BRAND, DROP_OFF_SLOT, STORE } from "@contracts/constants";
 import { formatBookingDevice } from "@contracts/booking";
+import { BOOKING_MODELS } from "@contracts/deviceModels";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Smartphone, Tablet, Laptop, Gamepad2, Battery, Plug, Layers, Camera,
@@ -35,22 +36,6 @@ const BRANDS: Record<string, string[]> = {
   Tablet: ["Apple iPad", "Samsung Galaxy Tab", "Other Tablet"],
   Laptop: ["Apple MacBook", "Windows Laptop"],
   Console: ["PlayStation", "Xbox"],
-};
-
-const MODELS: Record<string, string[]> = {
-  Apple: ["iPhone 17 Pro Max", "iPhone 17 Pro", "iPhone 17", "iPhone 16 Pro Max", "iPhone 16 Pro", "iPhone 16", "iPhone 15 Pro Max", "iPhone 15 Pro", "iPhone 15", "iPhone 14 Pro Max", "iPhone 14", "iPhone 13", "iPhone 12", "iPhone 11", "iPhone XR / X", "iPhone SE"],
-  Samsung: ["Galaxy S25 Ultra", "Galaxy S25", "Galaxy S24 Ultra", "Galaxy S24", "Galaxy S23 Ultra", "Galaxy S23", "Galaxy S22", "Galaxy S21", "Galaxy Note 20", "Galaxy A55", "Galaxy A35", "Galaxy Z Fold / Flip"],
-  Google: ["Pixel 10 Pro", "Pixel 10", "Pixel 9 Pro", "Pixel 9", "Pixel 8 Pro", "Pixel 8", "Pixel 7 Pro", "Pixel 7", "Pixel 6", "Pixel 5"],
-  Motorola: ["Moto G (2025)", "Moto G Power", "Moto G Stylus", "Edge (2024)", "Razr+", "Other Motorola"],
-  OnePlus: ["OnePlus 13", "OnePlus 12", "OnePlus 11", "OnePlus Nord", "Other OnePlus"],
-  Other: ["Other phone model"],
-  "Apple iPad": ["iPad Pro 13\"", "iPad Pro 11\"", "iPad Air", "iPad (10th Gen)", "iPad (9th Gen)", "iPad mini"],
-  "Samsung Galaxy Tab": ["Galaxy Tab S10", "Galaxy Tab S9", "Galaxy Tab S8", "Galaxy Tab A9", "Galaxy Tab A8"],
-  "Other Tablet": ["Other tablet model"],
-  "Apple MacBook": ["MacBook Pro 16\"", "MacBook Pro 14\"", "MacBook Pro 13\"", "MacBook Air 15\"", "MacBook Air 13\""],
-  "Windows Laptop": ["Dell", "HP", "Lenovo", "Asus", "Acer", "Microsoft Surface", "Other laptop"],
-  PlayStation: ["PlayStation 5 Pro", "PlayStation 5", "PlayStation 4"],
-  Xbox: ["Xbox Series X", "Xbox Series S", "Xbox One"],
 };
 
 type BookingItem = {
@@ -139,6 +124,7 @@ export default function Booking() {
   const [devType, setDevType] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
+  const [modelQuery, setModelQuery] = useState("");
   const [items, setItems] = useState<BookingItem[]>([]);
   const [date, setDate] = useState("");
   const [slot, setSlot] = useState("");
@@ -146,6 +132,11 @@ export default function Booking() {
   const [bookingId, setBookingId] = useState<number | null>(null);
 
   const days = useMemo(() => nextDays(10), []);
+  const models = useMemo(() => {
+    const all = BOOKING_MODELS[brand] ?? [];
+    const query = modelQuery.trim().toLowerCase();
+    return query ? all.filter((entry) => entry.toLowerCase().includes(query)) : all;
+  }, [brand, modelQuery]);
   const { data: slots, isFetching } = trpc.shop.slots.useQuery({ date }, { enabled: !!date });
   const book = trpc.shop.book.useMutation({
     onSuccess: (r) => { setBookingId(r.bookingId); setStep(8); window.scrollTo({ top: 0, behavior: "smooth" }); },
@@ -164,6 +155,7 @@ export default function Booking() {
     setDevType("");
     setBrand("");
     setModel("");
+    setModelQuery("");
     setProblem("");
     setStep(4);
   };
@@ -297,7 +289,7 @@ export default function Booking() {
               {step === 1 && (
                 <div className="grid grid-cols-2 gap-3">
                   {(BRANDS[devType] ?? []).map((b) => (
-                    <button key={b} onClick={() => { setBrand(b); setModel(""); setStep(2); }}
+                    <button key={b} onClick={() => { setBrand(b); setModel(""); setModelQuery(""); setStep(2); }}
                       className={`p-5 rounded-2xl border bg-white text-left font-semibold text-[15px] transition-all duration-300 flex items-center justify-between ${brand === b ? sel : card}`}>
                       {b} <ChevronRight size={17} className="text-ink/30" />
                     </button>
@@ -307,14 +299,40 @@ export default function Booking() {
 
               {/* 3 — model */}
               {step === 2 && (
-                <div className="bg-white rounded-2xl border border-blush overflow-hidden divide-y divide-blush/60 max-h-[52vh] overflow-y-auto">
-                  {(MODELS[brand] ?? []).map((m) => (
-                    <button key={m} onClick={() => { setModel(m); setStep(3); }}
-                      className={`w-full flex items-center justify-between px-6 py-4 text-left text-[15px] transition-colors ${model === m ? "bg-blush text-burgundy font-semibold" : "hover:bg-blush-light"}`}>
-                      {m}
-                      {model === m && <Check size={17} />}
-                    </button>
-                  ))}
+                <div className="overflow-hidden rounded-2xl border border-blush bg-white">
+                  <div className="border-b border-blush/60 p-3">
+                    <div className="relative">
+                      <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink/35" />
+                      <input
+                        type="search"
+                        value={modelQuery}
+                        onChange={(event) => setModelQuery(event.target.value)}
+                        placeholder={`Search ${brand} models…`}
+                        aria-label={`Search ${brand} models`}
+                        className="w-full rounded-xl border border-ink/10 bg-ivory py-2.5 pl-10 pr-3 text-sm text-ink outline-none transition-colors placeholder:text-ink/30 focus:border-burgundy"
+                      />
+                    </div>
+                    <p className="mt-2 px-1 text-[10.5px] text-ink/35">
+                      {models.length} model{models.length === 1 ? "" : "s"} · newer models first
+                    </p>
+                  </div>
+                  <div className="max-h-[46vh] divide-y divide-blush/60 overflow-y-auto">
+                    {models.map((m) => (
+                      <button key={m} onClick={() => { setModel(m); setModelQuery(""); setStep(3); }}
+                        className={`flex w-full items-center justify-between px-6 py-4 text-left text-[15px] transition-colors ${model === m ? "bg-blush font-semibold text-burgundy" : "hover:bg-blush-light"}`}>
+                        {m}
+                        {model === m && <Check size={17} />}
+                      </button>
+                    ))}
+                    {models.length === 0 && (
+                      <div className="px-6 py-8 text-center text-sm text-ink/45">
+                        <p>No model matches “{modelQuery}”.</p>
+                        <p className="mt-1 text-xs text-ink/35">
+                          Try a shorter search, or go back and choose the closest “Other” option.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
