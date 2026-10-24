@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle, Bot, Check, Loader2, Package, Send, Sparkles, TrendingUp, Wrench, X,
 } from "lucide-react";
@@ -106,14 +106,117 @@ function ProposalCard({ proposal }: { proposal: Proposal }) {
   );
 }
 
+function inline(text: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={index} className="rounded bg-ink/[0.06] px-1 py-0.5 font-mono text-[0.92em]">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
+type MessageBlock =
+  | { type: "text"; lines: string[] }
+  | { type: "table"; headers: string[]; rows: string[][] };
+
+function isTableLine(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.includes("|") && trimmed.split("|").length >= 3;
+}
+
+function splitRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return trimmed.split("|").map((cell) => cell.trim());
+}
+
+function isTableSeparator(line: string): boolean {
+  if (!line.includes("|")) return false;
+  const cells = splitRow(line);
+  return cells.length >= 2 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function parseMessage(text: string): MessageBlock[] {
+  const lines = text.split(/\r?\n/);
+  const blocks: MessageBlock[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    if (isTableLine(lines[index]) && isTableSeparator(lines[index + 1] ?? "")) {
+      const headers = splitRow(lines[index]);
+      index += 2;
+      const rows: string[][] = [];
+      while (index < lines.length && isTableLine(lines[index]) && !isTableSeparator(lines[index])) {
+        rows.push(splitRow(lines[index]));
+        index += 1;
+      }
+      if (rows.length) blocks.push({ type: "table", headers, rows });
+      continue;
+    }
+
+    const textLines: string[] = [];
+    while (index < lines.length) {
+      if (isTableLine(lines[index]) && isTableSeparator(lines[index + 1] ?? "")) break;
+      textLines.push(lines[index]);
+      index += 1;
+    }
+    if (textLines.some((line) => line.trim())) {
+      blocks.push({ type: "text", lines: textLines });
+    }
+  }
+
+  return blocks;
+}
+
 function FormattedMessage({ text }: { text: string }) {
+  const blocks = parseMessage(text);
+
   return (
     <>
-      {text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
-        part.startsWith("**") && part.endsWith("**") ? (
-          <strong key={index}>{part.slice(2, -2)}</strong>
+      {blocks.map((block, blockIndex) =>
+        block.type === "table" ? (
+          <div key={blockIndex} className="my-2 overflow-x-auto rounded-xl border border-blush/80">
+            <table className="w-full min-w-[420px] border-collapse text-left text-[12px]">
+              <thead className="bg-blush-light/70">
+                <tr>
+                  {block.headers.map((header, index) => (
+                    <th
+                      key={index}
+                      className="border-b border-blush px-3 py-2 text-[9.5px] font-semibold uppercase tracking-[0.1em] text-ink/45"
+                    >
+                      {inline(header)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-blush/50">
+                {block.rows.map((row, rowIndex) => (
+                  <tr key={rowIndex} className="align-top">
+                    {row.map((cell, cellIndex) => (
+                      <td
+                        key={cellIndex}
+                        className={`px-3 py-2 leading-snug ${
+                          cellIndex === 0 ? "font-medium text-ink/70" : "text-ink/60"
+                        }`}
+                      >
+                        {inline(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          <span key={index}>{part}</span>
+          <div key={blockIndex} className="whitespace-pre-wrap">
+            {inline(block.lines.join("\n"))}
+          </div>
         ),
       )}
     </>

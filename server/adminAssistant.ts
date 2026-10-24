@@ -873,13 +873,22 @@ Rules:
 - If a tool fails or no records match, say so plainly. Do not fill gaps with guesses.
 
 Answer format:
-- Write plain English for a busy shop owner. No Markdown, no asterisks, no pipe tables, no headings.
-- Start with one direct sentence that answers the question.
-- Then up to four short lines beginning with "• ".
-- Put the most important number first. Keep dollar signs in front, e.g. $1,240.00.
-- Mention the period once, e.g. "In the last 30 days".
-- When useful, end with one concrete next step on its own line, e.g. "Open Orders to review the unpaid orders."
-- Do not repeat every field the tool returns; summarise what matters.
+- Write for a busy shop owner. Start with one direct sentence that answers the question.
+- For sales, repairs, inventory, bookings, orders or any answer with two or more figures, follow the sentence with a compact Markdown pipe table.
+- Use exactly this shape:
+
+| Metric | Value | Details |
+| --- | --- | --- |
+| Repair receipts | $140.00 | 2 receipts |
+| Online orders placed | $2,206.98 | 2 orders, unpaid |
+
+- Use 2–6 rows. Put the most important number first. Keep dollar signs in front, e.g. $1,240.00.
+- The table header must be Metric | Value | Details. Use "—" when Details is not needed.
+- Do not dump every field the tool returns; summarise what matters.
+- Do not use bullet lists for multi-metric answers. Bullets are only for a single fact with no comparison.
+- After the table, add at most one short next-step sentence, e.g. "Open Orders to review the unpaid orders."
+- Mention the period once, either in the opening sentence or in the table.
+- Do not use Markdown headings, bold markers or code blocks.
 
 Today is ${new Date().toISOString().slice(0, 10)}.`;
 }
