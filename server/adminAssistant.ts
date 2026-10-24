@@ -965,7 +965,15 @@ export async function runAdminAssistant(
       continue;
     }
 
-    const reply = (message.content ?? "").replace(/\s+/g, " ").trim().slice(0, 2000);
+    // Preserve table rows and paragraph breaks. Collapsing all whitespace here
+    // (as the public assistant can) turns a Markdown table into one long line.
+    const reply = (message.content ?? "")
+      .replace(/\r\n?/g, "\n")
+      .replace(/[ \t]+/g, " ")
+      .replace(/ *\n */g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+      .slice(0, 3000);
     if (!reply) throw new Error("ASSISTANT_EMPTY");
     return { reply, proposals: Array.from(proposals.values()) };
   }
