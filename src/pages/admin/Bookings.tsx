@@ -3,7 +3,8 @@ import { trpc } from "@/providers/trpc";
 import { BOOKING_STATUSES, DROP_OFF_SLOT, TIME_SLOTS } from "@contracts/constants";
 import { formatBookingDevice } from "@contracts/booking";
 import { toast } from "sonner";
-import { X, Send } from "lucide-react";
+import { Download, Printer, X, Send } from "lucide-react";
+import { downloadReceiptPdf } from "@/lib/receiptPdf";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800",
@@ -197,9 +198,35 @@ function ReceiptForm({
       </p>
 
       {existing && (
-        <p className="text-xs bg-emerald-50 text-emerald-800 rounded-xl px-3.5 py-2.5 mb-4">
-          Receipt #PPR-R{existing.id} already issued for this booking ({existing.paidAt}).
-        </p>
+        <div className="rounded-xl bg-emerald-50 px-3.5 py-3 mb-4">
+          <p className="text-xs text-emerald-800">
+            Receipt #PPR-R{existing.id} already issued for this booking ({existing.paidAt}).
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  downloadReceiptPdf(existing);
+                  toast.success("Receipt PDF downloaded");
+                } catch {
+                  toast.error("Could not create the PDF. Open the receipt to print instead.");
+                }
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full bg-burgundy px-3 py-1.5 text-[11px] font-semibold text-ivory transition-colors hover:bg-burgundy-dark"
+            >
+              <Download size={12} /> Download PDF
+            </button>
+            <a
+              href={`/receipt/${existing.token}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-700/20 px-3 py-1.5 text-[11px] font-semibold text-emerald-800 transition-colors hover:bg-white"
+            >
+              <Printer size={12} /> View / print
+            </a>
+          </div>
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-3 mb-3">
