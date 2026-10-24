@@ -164,8 +164,22 @@ const TOOLS = [
     function: {
       name: "get_repair_history_summary",
       description:
-        "All-time repair history: how many repairs were completed, how much recorded repair revenue exists, average repair receipt, top repair types/devices and recent monthly volume. Use this for 'how much have I repaired' or 'total repairs'.",
-      parameters: { type: "object", properties: {}, required: [] },
+        "Repair history for all time, this month, last month or one calendar month. Returns completed repair count, booking count, recorded repair revenue, top repair types/devices, monthly volume and the exact recent completed records. Use this for 'how much have I repaired', 'total repairs', 'last month', or 'August'.",
+      parameters: {
+        type: "object",
+        properties: {
+          period: {
+            type: "string",
+            enum: ["all", "this_month", "last_month", "month"],
+            description: "Use all for 'until now'. Use last_month for the previous calendar month.",
+          },
+          month: {
+            type: "string",
+            description: "Required only for period=month, in YYYY-MM format.",
+          },
+        },
+        required: ["period"],
+      },
     },
   },
   {
@@ -577,13 +591,43 @@ async function executeTool(name: string, rawArguments: string, adminUid: string)
 
   if (name === "get_repair_history_summary") {
     const bookings = await store.bookings();
-    const completed = bookings.filter((booking) => booking.status === "completed");
     const receipts = await store.receipts();
-    const repairRevenueCents = receipts.reduce((sum, receipt) => sum + receipt.totalCents, 0);
+    const now = new Date();
+    const currentKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    const period = typeof args.period === "string" ? args.period : "all";
+    const requestedMonth = typeof args.month === "string" ? args.month.trim() : "";
+
+    let monthKey: string | null = null;
+    let periodLabel = "all time";
+    if (period === "this_month") {
+      monthKey = currentKey;
+      periodLabel = currentKey;
+    } else if (period === "last_month") {
+      const previous = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+      monthKey = `${previous.getUTCFullYear()}-${String(previous.getUTCMonth() + 1).padStart(2, "0")}`;
+      periodLabel = monthKey;
+    } else if (period === "month") {
+      if (!/^\d{4}-\d{2}$/.test(requestedMonth)) {
+        return { error: "For period=month, pass month as YYYY-MM." };
+      }
+      monthKey = requestedMonth;
+      periodLabel = requestedMonth;
+    }
+
+    const inPeriod = (date: string) => !monthKey || date.startsWith(monthKey);
+    const bookingsInPeriod = bookings.filter((booking) => inPeriod(booking.date));
+    const completedInPeriod = bookingsInPeriod.filter((booking) => booking.status === "completed");
+    const completedAllTime = bookings.filter((booking) => booking.status === "completed");
+    const receiptsInPeriod = receipts.filter((receipt) =>
+      monthKey
+        ? (receipt.paidAt || receipt.createdAt.toISOString().slice(0, 10)).startsWith(monthKey)
+        : true,
+    );
+    const repairRevenueCents = receiptsInPeriod.reduce((sum, receipt) => sum + receipt.totalCents, 0);
 
     const typeTotals = new Map<string, number>();
     const deviceTotals = new Map<string, number>();
-    for (const booking of completed) {
+    for (const booking of completedInPeriod) {
       const types = booking.items.length
         ? booking.items.map((item) => item.repairType)
         : [booking.repairType];
@@ -596,29 +640,37 @@ async function executeTool(name: string, rawArguments: string, adminUid: string)
       }
     }
 
-    const now = new Date();
     const months: Array<{ month: string; completed: number }> = [];
     for (let offset = 5; offset >= 0; offset -= 1) {
-      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
       months.push({
         month: key,
-        completed: completed.filter((booking) =>
-          booking.date.startsWith(key),
+        completed: bookings.filter(
+          (booking) => booking.status === "completed" && booking.date.startsWith(key),
         ).length,
       });
     }
 
     return {
-      totalBookings: bookings.length,
-      completedRepairs: completed.length,
+      period: period === "all" ? "all time" : periodLabel,
+      periodStart: monthKey ? `${monthKey}-01` : null,
+      periodEnd: monthKey
+        ? new Date(Date.UTC(Number(monthKey.slice(0, 4)), Number(monthKey.slice(5, 7)), 0))
+            .toISOString()
+            .slice(0, 10)
+        : null,
+      totalBookingsOnFile: bookings.length,
+      completedAllTime: completedAllTime.length,
+      bookingsInPeriod: bookingsInPeriod.length,
+      completedInPeriod: completedInPeriod.length,
       openRepairs: bookings.filter((booking) =>
         ["pending", "accepted", "in_progress", "rescheduled"].includes(booking.status),
       ).length,
       cancelledRepairs: bookings.filter((booking) => booking.status === "cancelled").length,
-      recordedReceiptCount: receipts.length,
+      recordedReceiptCount: receiptsInPeriod.length,
       repairRevenueCents: cents(repairRevenueCents),
-      averageReceiptCents: receipts.length ? cents(repairRevenueCents / receipts.length) : 0,
+      averageReceiptCents: receiptsInPeriod.length ? cents(repairRevenueCents / receiptsInPeriod.length) : 0,
       topRepairTypes: Array.from(typeTotals.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 8)
@@ -627,9 +679,22 @@ async function executeTool(name: string, rawArguments: string, adminUid: string)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 8)
         .map(([device, count]) => ({ device, completedCount: count })),
+      recentCompleted: completedInPeriod
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 10)
+        .map((booking) => ({
+          id: booking.id,
+          customerName: booking.customerName,
+          device: booking.device,
+          repairType: booking.repairType,
+          date: booking.date,
+          status: booking.status,
+        })),
       recentMonths: months,
+      dataScope:
+        "Only bookings stored in this admin system are counted. Repairs recorded on paper or in another system are not included. Counts use the booking appointment date, not a completion timestamp.",
       note:
-        "Completed repairs are bookings with status completed. Recorded revenue is only from repair receipts staff actually entered; it may be lower or zero even when repairs were completed. Report the repair count and recorded revenue separately.",
+        "Completed repairs are bookings with status completed. Recorded revenue is only from repair receipts staff actually entered; it may be zero even when repairs were completed. Report the repair count and recorded revenue separately.",
     };
   }
 
@@ -796,7 +861,10 @@ Rules:
 - Currency is USD. Tool values are in cents; divide by 100 and format as dollars.
 - "Sales" has two streams: paid online-shop orders and recorded repair receipts. Report them separately, plus the combined total. Unpaid and refunded orders are not revenue. Repair receipts only include payments staff actually recorded in the admin system.
 - Use "collected" for paid money. Use "orders placed" for all non-cancelled orders, even when unpaid. If orders were placed but none are paid, say that clearly instead of implying there were no orders.
-- For "how much have I repaired", "total repairs" or similar all-time questions, call get_repair_history_summary. Report completed repair count and recorded repair revenue separately. If completed repairs exist but no receipts are recorded, say that receipts are missing — never say "nothing." If completedRepairs is 0 but totalBookings is above 0, say how many bookings exist/open and that none are marked completed yet.
+- For "how much have I repaired", "total repairs" or similar all-time questions, call get_repair_history_summary with period="all". Report completedInPeriod and recorded repair revenue separately. If completed repairs exist but no receipts are recorded, say that receipts are missing — never say "nothing." If completedInPeriod is 0 but totalBookingsOnFile is above 0, say how many bookings exist/open and that none are marked completed for that period.
+- For "last month", call get_repair_history_summary with period="last_month". For "this month", use period="this_month". For a named month such as August, use period="month" with month="YYYY-MM". Never answer a period question from all-time totals.
+- For "how much have I repaired", report completed count and recorded revenue. Do not claim a completion date: the system stores the appointment date, not a completion timestamp.
+- Only mention a booking id, customer name, device or repair if it appears in recentCompleted. Never invent records. If the tool returns only two bookings but the owner expects more, explain dataScope: only bookings stored in this admin system are counted.
 - "Inventory" has two parts: repair parts valued at cost, and retail products valued at selling price. Do not combine their values without labelling them.
 - For low stock, use the part's lowStockAt threshold. For products, flag stock === 0 as out of stock.
 - Do not expose customer phone numbers or emails; recent-order results intentionally omit them.

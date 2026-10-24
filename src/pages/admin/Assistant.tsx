@@ -239,7 +239,8 @@ export default function AdminAssistant() {
           ))}
           <p className="pt-2 text-[10.5px] leading-relaxed text-ink/35">
             Sales combine paid online orders with repair receipts recorded in the admin system.
-            Unpaid and refunded orders are reported separately.
+            Unpaid and refunded orders are reported separately. Repair counts include only
+            bookings saved in this admin system — not paper or other-system history.
           </p>
         </aside>
 
