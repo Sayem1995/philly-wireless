@@ -163,11 +163,36 @@ export const adminRouter = createRouter({
       const filtered = input?.status && input.status !== "all"
         ? all.filter((b) => b.status === input.status)
         : all;
-      return filtered.sort((a, b) => {
-        const d = b.date.localeCompare(a.date);
-        if (d !== 0) return d;
-        return b.timeSlot.localeCompare(a.timeSlot);
-      });
+
+      const receipts = await store.receipts();
+      const receiptByBooking = new Map<number, (typeof receipts)[number]>();
+      for (const receipt of receipts) {
+        if (receipt.bookingId !== null && !receiptByBooking.has(receipt.bookingId)) {
+          receiptByBooking.set(receipt.bookingId, receipt);
+        }
+      }
+
+      return filtered
+        .sort((a, b) => {
+          const d = b.date.localeCompare(a.date);
+          if (d !== 0) return d;
+          return b.timeSlot.localeCompare(a.timeSlot);
+        })
+        .map((booking) => {
+          const receipt = receiptByBooking.get(booking.id);
+          return {
+            ...booking,
+            receipt: receipt
+              ? {
+                  id: receipt.id,
+                  token: receipt.token,
+                  totalCents: receipt.totalCents,
+                  paymentMethod: receipt.paymentMethod,
+                  paidAt: receipt.paidAt,
+                }
+              : null,
+          };
+        });
     }),
 
   updateBooking: adminQuery.input(bookingInput).mutation(async ({ input }) => {

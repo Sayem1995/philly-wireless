@@ -3,8 +3,12 @@ import { trpc } from "@/providers/trpc";
 import { BOOKING_STATUSES, DROP_OFF_SLOT, TIME_SLOTS } from "@contracts/constants";
 import { formatBookingDevice } from "@contracts/booking";
 import { toast } from "sonner";
-import { Download, Printer, X, Send } from "lucide-react";
+import { Banknote, Download, FileText, Printer, X, Send } from "lucide-react";
 import { downloadReceiptPdf } from "@/lib/receiptPdf";
+
+function money(cents: number) {
+  return `$${(cents / 100).toFixed(2)}`;
+}
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800",
@@ -18,6 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function Bookings() {
   const [filter, setFilter] = useState("all");
   const [sel, setSel] = useState<number | null>(null);
+  const [paymentFor, setPaymentFor] = useState<number | null>(null);
   const [note, setNote] = useState({ channel: "sms" as "sms" | "email" | "call", message: "" });
   const utils = trpc.useUtils();
   const { data } = trpc.admin.bookings.useQuery({ status: filter });
@@ -37,6 +42,7 @@ export default function Bookings() {
   });
 
   const booking = data?.find((b) => b.id === sel);
+  const paymentBooking = data?.find((b) => b.id === paymentFor);
   const input = "border border-ink/15 rounded-xl px-3.5 py-2.5 text-sm bg-ivory focus:outline-none focus:border-burgundy";
 
   return (
@@ -51,9 +57,9 @@ export default function Bookings() {
         ))}
       </div>
       <div className="bg-white rounded-2xl border border-blush overflow-x-auto">
-        <table className="w-full text-sm min-w-[820px]">
+        <table className="w-full text-sm min-w-[760px]">
           <thead><tr className="text-left text-[11px] tracking-[0.15em] uppercase text-ink/40 border-b border-blush">
-            <th className="px-5 py-4">#</th><th className="px-5 py-4">Customer</th><th className="px-5 py-4">Device / Repair</th><th className="px-5 py-4">When</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Warranty</th><th className="px-5 py-4"></th>
+            <th className="px-5 py-4">#</th><th className="px-5 py-4">Customer</th><th className="px-5 py-4">Device / Repair</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Paid Amount</th><th className="px-5 py-4">Receipt</th><th className="px-5 py-4"></th>
           </tr></thead>
           <tbody>
             {(data ?? []).map((b) => (
@@ -66,9 +72,36 @@ export default function Bookings() {
                     {b.items.length > 1 ? b.items.map((item) => item.repairType).join(" · ") : b.repairType}
                   </p>
                 </td>
-                <td className="px-5 py-3.5">{b.date}<p className="text-xs text-ink/45">{b.timeSlot}</p></td>
                 <td className="px-5 py-3.5"><span className={`text-[11px] px-3 py-1 rounded-full font-medium ${STATUS_COLORS[b.status]}`}>{b.status.replace("_", " ")}</span></td>
-                <td className="px-5 py-3.5 text-xs text-ink/50">{b.warrantyUntil ?? "—"}</td>
+                <td className="px-5 py-3.5">
+                  {b.receipt ? (
+                    <button
+                      type="button"
+                      onClick={() => setPaymentFor(b.id)}
+                      className="text-left text-burgundy transition-colors hover:text-burgundy-dark"
+                      title="View payment details"
+                    >
+                      <span className="block text-sm font-semibold">{money(b.receipt.totalCents)}</span>
+                      <span className="block text-[10px] capitalize text-ink/40">{b.receipt.paymentMethod}</span>
+                    </button>
+                  ) : (
+                    <span className="text-xs text-ink/30">Unpaid</span>
+                  )}
+                </td>
+                <td className="px-5 py-3.5">
+                  {b.receipt ? (
+                    <a
+                      href={`/receipt/${b.receipt.token}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-burgundy hover:underline"
+                    >
+                      <FileText size={13} /> Receipt
+                    </a>
+                  ) : (
+                    <span className="text-xs text-ink/30">—</span>
+                  )}
+                </td>
                 <td className="px-5 py-3.5"><button onClick={() => setSel(b.id)} className="text-burgundy text-xs font-semibold hover:underline">Manage</button></td>
               </tr>
             ))}
@@ -76,6 +109,61 @@ export default function Bookings() {
         </table>
         {(data ?? []).length === 0 && <p className="p-10 text-center text-ink/40 text-sm">No bookings in this view.</p>}
       </div>
+
+      {paymentBooking?.receipt && (
+        <div
+          className="fixed inset-0 z-[60] grid place-items-center bg-ink/40 px-4 backdrop-blur-sm"
+          onClick={() => setPaymentFor(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl border border-blush bg-ivory p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Payment for booking ${paymentBooking.id}`}
+          >
+            <div className="mb-5 flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-blush text-burgundy">
+                  <Banknote size={18} />
+                </span>
+                <div>
+                  <h2 className="font-serif text-xl text-ink">Payment received</h2>
+                  <p className="text-[11px] text-ink/40">Booking #{paymentBooking.id}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setPaymentFor(null)} aria-label="Close payment details">
+                <X size={20} className="text-ink/40 hover:text-burgundy" />
+              </button>
+            </div>
+
+            <p className="font-serif text-3xl text-burgundy">{money(paymentBooking.receipt.totalCents)}</p>
+            <dl className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between gap-3 border-b border-blush/60 pb-2">
+                <dt className="text-ink/45">Method</dt>
+                <dd className="font-semibold capitalize">{paymentBooking.receipt.paymentMethod}</dd>
+              </div>
+              <div className="flex justify-between gap-3 border-b border-blush/60 pb-2">
+                <dt className="text-ink/45">Paid date</dt>
+                <dd className="font-medium">{paymentBooking.receipt.paidAt}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-ink/45">Receipt</dt>
+                <dd className="font-medium">#PPR-R{paymentBooking.receipt.id}</dd>
+              </div>
+            </dl>
+
+            <a
+              href={`/receipt/${paymentBooking.receipt.token}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-burgundy px-4 py-2.5 text-sm font-semibold text-ivory transition-colors hover:bg-burgundy-dark"
+            >
+              <FileText size={15} /> Open receipt
+            </a>
+          </div>
+        </div>
+      )}
 
       {booking && (
         <div className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm flex justify-end" onClick={() => setSel(null)}>
