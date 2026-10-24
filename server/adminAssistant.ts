@@ -162,6 +162,15 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "get_repair_history_summary",
+      description:
+        "All-time repair history: how many repairs were completed, how much recorded repair revenue exists, average repair receipt, top repair types/devices and recent monthly volume. Use this for 'how much have I repaired' or 'total repairs'.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_receipts",
       description: "Summarise recorded repair receipts and recent repair sales.",
       parameters: {
@@ -566,6 +575,64 @@ async function executeTool(name: string, rawArguments: string, adminUid: string)
     };
   }
 
+  if (name === "get_repair_history_summary") {
+    const bookings = await store.bookings();
+    const completed = bookings.filter((booking) => booking.status === "completed");
+    const receipts = await store.receipts();
+    const repairRevenueCents = receipts.reduce((sum, receipt) => sum + receipt.totalCents, 0);
+
+    const typeTotals = new Map<string, number>();
+    const deviceTotals = new Map<string, number>();
+    for (const booking of completed) {
+      const types = booking.items.length
+        ? booking.items.map((item) => item.repairType)
+        : [booking.repairType];
+      for (const type of types) typeTotals.set(type, (typeTotals.get(type) ?? 0) + 1);
+      const devices = booking.items.length
+        ? booking.items.map((item) => item.model)
+        : [booking.device];
+      for (const device of devices) {
+        if (device) deviceTotals.set(device, (deviceTotals.get(device) ?? 0) + 1);
+      }
+    }
+
+    const now = new Date();
+    const months: Array<{ month: string; completed: number }> = [];
+    for (let offset = 5; offset >= 0; offset -= 1) {
+      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      months.push({
+        month: key,
+        completed: completed.filter((booking) =>
+          booking.date.startsWith(key),
+        ).length,
+      });
+    }
+
+    return {
+      totalBookings: bookings.length,
+      completedRepairs: completed.length,
+      openRepairs: bookings.filter((booking) =>
+        ["pending", "accepted", "in_progress", "rescheduled"].includes(booking.status),
+      ).length,
+      cancelledRepairs: bookings.filter((booking) => booking.status === "cancelled").length,
+      recordedReceiptCount: receipts.length,
+      repairRevenueCents: cents(repairRevenueCents),
+      averageReceiptCents: receipts.length ? cents(repairRevenueCents / receipts.length) : 0,
+      topRepairTypes: Array.from(typeTotals.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([repairType, count]) => ({ repairType, completedCount: count })),
+      topDevices: Array.from(deviceTotals.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([device, count]) => ({ device, completedCount: count })),
+      recentMonths: months,
+      note:
+        "Completed repairs are bookings with status completed. Recorded revenue is only from repair receipts staff actually entered; it may be lower or zero even when repairs were completed. Report the repair count and recorded revenue separately.",
+    };
+  }
+
   if (name === "get_receipts") {
     const requested = typeof args.days === "number" ? args.days : 30;
     const days = Math.min(365, Math.max(1, Math.round(requested)));
@@ -729,6 +796,7 @@ Rules:
 - Currency is USD. Tool values are in cents; divide by 100 and format as dollars.
 - "Sales" has two streams: paid online-shop orders and recorded repair receipts. Report them separately, plus the combined total. Unpaid and refunded orders are not revenue. Repair receipts only include payments staff actually recorded in the admin system.
 - Use "collected" for paid money. Use "orders placed" for all non-cancelled orders, even when unpaid. If orders were placed but none are paid, say that clearly instead of implying there were no orders.
+- For "how much have I repaired", "total repairs" or similar all-time questions, call get_repair_history_summary. Report completed repair count and recorded repair revenue separately. If completed repairs exist but no receipts are recorded, say that receipts are missing — never say "nothing." If completedRepairs is 0 but totalBookings is above 0, say how many bookings exist/open and that none are marked completed yet.
 - "Inventory" has two parts: repair parts valued at cost, and retail products valued at selling price. Do not combine their values without labelling them.
 - For low stock, use the part's lowStockAt threshold. For products, flag stock === 0 as out of stock.
 - Do not expose customer phone numbers or emails; recent-order results intentionally omit them.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, Bot, Check, Loader2, Package, Send, Sparkles, TrendingUp, X,
+  AlertTriangle, Bot, Check, Loader2, Package, Send, Sparkles, TrendingUp, Wrench, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import Seo from "@/components/Seo";
@@ -123,6 +123,7 @@ function FormattedMessage({ text }: { text: string }) {
 const SUGGESTIONS = [
   { icon: AlertTriangle, label: "What parts are low in stock?" },
   { icon: Package, label: "What is my total inventory value?" },
+  { icon: Wrench, label: "How many repairs have I completed?" },
   { icon: TrendingUp, label: "How much did I sell in the last 30 days?" },
   { icon: Sparkles, label: "Which products sold best this month?" },
   { icon: Package, label: "Which products are out of stock?" },
