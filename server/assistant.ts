@@ -286,7 +286,7 @@ export async function runAssistant(messages: AssistantMessage[]): Promise<{ repl
 
   for (let round = 0; round < 3; round += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25_000);
+    const timeout = setTimeout(() => controller.abort(), env.aiTimeoutMs);
     let response: Response;
     try {
       response = await fetch(`${env.aiBaseUrl}/chat/completions`, {

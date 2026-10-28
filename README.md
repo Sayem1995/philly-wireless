@@ -122,6 +122,7 @@ Server values must never use that prefix.
 | `AI_BASE_URL`                                                   | OpenAI-compatible base URL (e.g. local `/v1`)  |
 | `AI_API_KEY`                                                    | Key for the custom endpoint; falls back to DeepSeek |
 | `AI_MODEL`                                                      | Model name at the custom endpoint              |
+| `AI_TIMEOUT_MS`                                                 | AI request timeout; default `25000`             |
 | `STORE_TIMEZONE`                                                | IANA timezone for assistant hours/cutoff       |
 
 When no email provider is configured, `sendEmail()` returns

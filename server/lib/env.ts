@@ -101,6 +101,9 @@ export const env = {
   aiModel,
   aiUsesDeepSeek,
   aiConfigured: Boolean(aiApiKey) || !aiUsesDeepSeek,
+  // Local models can be much slower than hosted ones. Vercel's function limit
+  // still applies in production; set this to fit the host.
+  aiTimeoutMs: numeric("AI_TIMEOUT_MS", 25_000, 5_000, 120_000),
   storeTimezone: optional("STORE_TIMEZONE").trim() || "America/New_York",
 
   // How long an unpaid card order holds its stock. Stripe Checkout sessions
