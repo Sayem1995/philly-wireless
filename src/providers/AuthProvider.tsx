@@ -41,9 +41,10 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  // Firebase Auth always emits an initial callback, so when no auth instance
-  // exists there is nothing to wait for and we are already "booted".
-  const [booting, setBooting] = useState(!auth);
+  // Firebase Auth always emits an initial callback when an instance exists.
+  // When Firebase is not configured there is nothing to wait for, so booting
+  // must start false; otherwise the admin route stays in a loading state.
+  const [booting, setBooting] = useState(Boolean(auth));
 
   const isFirebaseReady = isFirebaseConfigured();
   const utils = trpc.useUtils();
