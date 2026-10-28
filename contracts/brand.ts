@@ -48,9 +48,22 @@ const DEFAULT_COLORS: BrandColors = {
 
 /* ────────────────────────────── helpers ────────────────────────────── */
 
+function readEnv(name: string): string | undefined {
+  // Node/Vite config/server: process.env is available.
+  if (typeof process !== "undefined" && process.env) {
+    const nodeValue = process.env[name];
+    if (typeof nodeValue === "string") return nodeValue;
+  }
+  // Browser: Vite exposes only VITE_* values through import.meta.env.
+  const meta = import.meta as ImportMeta & {
+    env?: Record<string, string | undefined>;
+  };
+  return meta.env?.[name];
+}
+
 function readString(names: string[], fallback: string): string {
   for (const name of names) {
-    const raw = process.env[name];
+    const raw = readEnv(name);
     if (typeof raw === "string" && raw.trim() !== "") return raw.trim();
   }
   return fallback;
