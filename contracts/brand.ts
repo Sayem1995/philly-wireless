@@ -54,11 +54,71 @@ function readEnv(name: string): string | undefined {
     const nodeValue = process.env[name];
     if (typeof nodeValue === "string") return nodeValue;
   }
-  // Browser: Vite exposes only VITE_* values through import.meta.env.
-  const meta = import.meta as ImportMeta & {
-    env?: Record<string, string | undefined>;
+
+  // Vite's SSR module runner rejects dynamic import.meta.env access. Browser
+  // values must be read through explicit keys, and only in the browser.
+  if (!("window" in globalThis)) return undefined;
+  const browserMeta = import.meta as ImportMeta & {
+    env: Record<string, string | undefined>;
   };
-  return meta.env?.[name];
+  switch (name) {
+    case "VITE_BRAND_NAME":
+      return browserMeta.env.VITE_BRAND_NAME;
+    case "VITE_BRAND_WORDMARK_PRIMARY":
+      return browserMeta.env.VITE_BRAND_WORDMARK_PRIMARY;
+    case "VITE_BRAND_WORDMARK_ACCENT":
+      return browserMeta.env.VITE_BRAND_WORDMARK_ACCENT;
+    case "VITE_BRAND_PHONE":
+      return browserMeta.env.VITE_BRAND_PHONE;
+    case "VITE_BRAND_SITE_URL":
+      return browserMeta.env.VITE_BRAND_SITE_URL;
+    case "VITE_BRAND_STREET":
+      return browserMeta.env.VITE_BRAND_STREET;
+    case "VITE_BRAND_CITY":
+      return browserMeta.env.VITE_BRAND_CITY;
+    case "VITE_BRAND_LOGO_TYPE":
+      return browserMeta.env.VITE_BRAND_LOGO_TYPE;
+    case "VITE_BRAND_TAGLINE":
+      return browserMeta.env.VITE_BRAND_TAGLINE;
+    case "VITE_BRAND_DESCRIPTION":
+      return browserMeta.env.VITE_BRAND_DESCRIPTION;
+    case "VITE_BRAND_REGION":
+      return browserMeta.env.VITE_BRAND_REGION;
+    case "VITE_BRAND_CITY_LABEL":
+      return browserMeta.env.VITE_BRAND_CITY_LABEL;
+    case "VITE_BRAND_STORY":
+      return browserMeta.env.VITE_BRAND_STORY;
+    case "VITE_BRAND_EMAIL":
+      return browserMeta.env.VITE_BRAND_EMAIL;
+    case "VITE_BRAND_WHATSAPP":
+      return browserMeta.env.VITE_BRAND_WHATSAPP;
+    case "VITE_BRAND_HOURS":
+      return browserMeta.env.VITE_BRAND_HOURS;
+    case "VITE_BRAND_LOGO_ICON":
+      return browserMeta.env.VITE_BRAND_LOGO_ICON;
+    case "VITE_BRAND_LOGO_FULL":
+      return browserMeta.env.VITE_BRAND_LOGO_FULL;
+    case "VITE_BRAND_PRIMARY":
+      return browserMeta.env.VITE_BRAND_PRIMARY;
+    case "VITE_BRAND_PRIMARY_DARK":
+      return browserMeta.env.VITE_BRAND_PRIMARY_DARK;
+    case "VITE_BRAND_PRIMARY_LIGHT":
+      return browserMeta.env.VITE_BRAND_PRIMARY_LIGHT;
+    case "VITE_BRAND_SECONDARY":
+      return browserMeta.env.VITE_BRAND_SECONDARY;
+    case "VITE_BRAND_SECONDARY_DARK":
+      return browserMeta.env.VITE_BRAND_SECONDARY_DARK;
+    case "VITE_BRAND_SECONDARY_LIGHT":
+      return browserMeta.env.VITE_BRAND_SECONDARY_LIGHT;
+    case "VITE_BRAND_SURFACE":
+      return browserMeta.env.VITE_BRAND_SURFACE;
+    case "VITE_BRAND_INK":
+      return browserMeta.env.VITE_BRAND_INK;
+    case "VITE_BRAND_ACCENT":
+      return browserMeta.env.VITE_BRAND_ACCENT;
+    default:
+      return undefined;
+  }
 }
 
 function readString(names: string[], fallback: string): string {
