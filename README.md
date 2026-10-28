@@ -117,21 +117,34 @@ Server values must never use that prefix.
 | `SENDGRID_API_KEY` / `SENDGRID_FROM`                            | Email via SendGrid Web API (preferred)        |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Email via SMTP fallback                       |
 | `STAFF_EMAIL`                                                   | Recipient for new-booking notifications       |
-| `DEEPSEEK_API_KEY`                                              | Server-side AI assistant key (optional)       |
-| `DEEPSEEK_MODEL`                                                | DeepSeek model; defaults to `deepseek-flash`  |
-| `STORE_TIMEZONE`                                                | IANA timezone for assistant hours/cutoff      |
+| `DEEPSEEK_API_KEY`                                              | Default server-side AI key (optional)          |
+| `DEEPSEEK_MODEL`                                                | Default model; `deepseek-flash`                |
+| `AI_BASE_URL`                                                   | OpenAI-compatible base URL (e.g. local `/v1`)  |
+| `AI_API_KEY`                                                    | Key for the custom endpoint; falls back to DeepSeek |
+| `AI_MODEL`                                                      | Model name at the custom endpoint              |
+| `STORE_TIMEZONE`                                                | IANA timezone for assistant hours/cutoff       |
 
 When no email provider is configured, `sendEmail()` returns
 `{ delivered: false }` and the message is recorded in the CRM communication
 history instead — bookings still succeed.
 
-### AI assistant (DeepSeek)
+### AI assistant (OpenAI-compatible)
 
-The floating **AI** button opens a chat and voice assistant. It uses DeepSeek
-for conversation and browser speech recognition/synthesis for voice, so no
-voice-platform subscription is required. The server tools only read live
-prices and booking availability; the assistant links to `/book` for the
-customer to confirm, and never creates a booking or takes card details.
+The floating **AI** button opens a chat and voice assistant. It uses an
+OpenAI-compatible chat endpoint for conversation and browser speech
+recognition/synthesis for voice, so no voice-platform subscription is required.
+The server tools only read live prices and booking availability; the assistant
+links to `/book` for the customer to confirm, and never creates a booking or
+takes card details.
+
+DeepSeek is the default. To use a local or self-hosted model, set
+`AI_BASE_URL` (for example `http://127.0.0.1:11434/v1`), `AI_MODEL`, and
+`AI_API_KEY` if the server requires one. The URL must expose an
+OpenAI-compatible `/chat/completions` route and support tool/function calling;
+otherwise the assistant can chat but cannot read live prices, slots or admin
+data. `localhost` only works when the app is also running locally — production
+Vercel functions cannot reach your computer, so use a reachable HTTPS model
+server for production.
 
 Add `DEEPSEEK_API_KEY` to the server environment (not `VITE_*`). Without it the
 widget still shows **Call**, **WhatsApp** and **Book** and explains that the AI
@@ -149,7 +162,7 @@ them. Each becomes a server-side proposal with a 15-minute expiry; the admin
 must click **Approve**, and the server re-reads the record and refuses if it
 changed. `assistantActions` is server-only in Firestore and is the audit trail.
 The analyst cannot access secrets, auth, payments/refunds, deletions or bulk
-edits. It uses the same `DEEPSEEK_API_KEY`.
+edits. It uses the same AI provider configuration as the customer assistant.
 
 ### Customer notifications (email + SMS)
 

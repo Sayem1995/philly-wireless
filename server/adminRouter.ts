@@ -82,7 +82,7 @@ export const adminRouter = createRouter({
 
   /* ---------- AI operations analyst (admin-only) ---------- */
   assistantStatus: adminQuery.query(() => ({
-    configured: Boolean(env.deepseekApiKey),
+    configured: env.aiConfigured,
   })),
 
   assistant: adminQuery
@@ -112,10 +112,10 @@ export const adminRouter = createRouter({
         });
       }
 
-      if (!env.deepseekApiKey) {
+      if (!env.aiConfigured) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
-          message: "The admin AI analyst is not configured yet. Add DEEPSEEK_API_KEY in Vercel.",
+          message: "The admin AI analyst is not configured yet. Add an AI provider key/base URL in Vercel.",
         });
       }
 

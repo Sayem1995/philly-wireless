@@ -16,6 +16,24 @@ function numeric(name: string, fallback: number, min: number, max: number): numb
   return Math.min(max, Math.max(min, parsed));
 }
 
+const deepseekApiKey = optional("DEEPSEEK_API_KEY").trim();
+const deepseekModel = optional("DEEPSEEK_MODEL").trim() || "deepseek-flash";
+
+// The assistant speaks the OpenAI chat-completions format. Point AI_BASE_URL
+// at any compatible server (vLLM, llama.cpp, Ollama, LM Studio, Liquid, …).
+// The base URL should include /v1 when the server expects it, but not the
+// final /chat/completions path.
+const aiBaseUrl = (optional("AI_BASE_URL").trim() || "https://api.deepseek.com").replace(/\/+$/, "");
+const aiApiKey = optional("AI_API_KEY").trim() || deepseekApiKey;
+const aiModel = optional("AI_MODEL").trim() || deepseekModel;
+const aiUsesDeepSeek = (() => {
+  try {
+    return /(^|\.)deepseek\.com$/i.test(new URL(aiBaseUrl).hostname);
+  } catch {
+    return false;
+  }
+})();
+
 export const env = {
   appId: optional("APP_ID"),
   appSecret: optional("APP_SECRET"),
@@ -72,10 +90,17 @@ export const env = {
   stripeSecretKey: optional("STRIPE_SECRET_KEY").trim(),
   stripeWebhookSecret: optional("STRIPE_WEBHOOK_SECRET").trim(),
 
-  // ── AI assistant (DeepSeek; optional) ─────────────────────────────
-  // Without a key the widget still offers call, WhatsApp and manual booking.
-  deepseekApiKey: optional("DEEPSEEK_API_KEY").trim(),
-  deepseekModel: optional("DEEPSEEK_MODEL").trim() || "deepseek-flash",
+  // ── AI assistant (OpenAI-compatible; optional) ─────────────────────
+  // Default remains DeepSeek. Set AI_BASE_URL + AI_MODEL to use a local or
+  // self-hosted model instead. Without a key the widget still offers call,
+  // WhatsApp and manual booking.
+  deepseekApiKey,
+  deepseekModel,
+  aiBaseUrl,
+  aiApiKey,
+  aiModel,
+  aiUsesDeepSeek,
+  aiConfigured: Boolean(aiApiKey) || !aiUsesDeepSeek,
   storeTimezone: optional("STORE_TIMEZONE").trim() || "America/New_York",
 
   // How long an unpaid card order holds its stock. Stripe Checkout sessions

@@ -275,7 +275,7 @@ function safeAssistantText(text: string): string {
 }
 
 export async function runAssistant(messages: AssistantMessage[]): Promise<{ reply: string }> {
-  if (!env.deepseekApiKey) {
+  if (!env.aiConfigured) {
     throw new Error("ASSISTANT_NOT_CONFIGURED");
   }
 
@@ -289,21 +289,20 @@ export async function runAssistant(messages: AssistantMessage[]): Promise<{ repl
     const timeout = setTimeout(() => controller.abort(), 25_000);
     let response: Response;
     try {
-      response = await fetch("https://api.deepseek.com/chat/completions", {
+      response = await fetch(`${env.aiBaseUrl}/chat/completions`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${env.deepseekApiKey}`,
           "Content-Type": "application/json",
+          ...(env.aiApiKey ? { Authorization: `Bearer ${env.aiApiKey}` } : {}),
         },
         body: JSON.stringify({
-          model: env.deepseekModel,
+          model: env.aiModel,
           messages: conversation,
           tools: TOOLS,
           tool_choice: "auto",
-          // This is a latency-sensitive voice assistant. Thinking mode would
-          // add a hidden reasoning pass and require passing reasoning_content
-          // back through every tool round-trip.
-          thinking: { type: "disabled" },
+          // DeepSeek-specific latency control; local OpenAI-compatible servers
+          // reject unknown request fields.
+          ...(env.aiUsesDeepSeek ? { thinking: { type: "disabled" } } : {}),
           temperature: 0.2,
           max_tokens: 500,
           stream: false,
@@ -316,7 +315,7 @@ export async function runAssistant(messages: AssistantMessage[]): Promise<{ repl
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      console.error(`[assistant] DeepSeek ${response.status}: ${detail.slice(0, 300)}`);
+      console.error(`[assistant] ${env.aiModel} ${response.status}: ${detail.slice(0, 300)}`);
       throw new Error("ASSISTANT_UPSTREAM");
     }
 

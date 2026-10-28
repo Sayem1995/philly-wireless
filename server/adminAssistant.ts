@@ -897,7 +897,7 @@ export async function runAdminAssistant(
   messages: AdminAssistantMessage[],
   adminUid: string,
 ): Promise<{ reply: string; proposals: AssistantProposal[] }> {
-  if (!env.deepseekApiKey) throw new Error("ASSISTANT_NOT_CONFIGURED");
+  if (!env.aiConfigured) throw new Error("ASSISTANT_NOT_CONFIGURED");
 
   const proposals = new Map<string, AssistantProposal>();
   const conversation: DeepSeekMessage[] = [
@@ -910,18 +910,19 @@ export async function runAdminAssistant(
     const timeout = setTimeout(() => controller.abort(), 25_000);
     let response: Response;
     try {
-      response = await fetch("https://api.deepseek.com/chat/completions", {
+      response = await fetch(`${env.aiBaseUrl}/chat/completions`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${env.deepseekApiKey}`,
           "Content-Type": "application/json",
+          ...(env.aiApiKey ? { Authorization: `Bearer ${env.aiApiKey}` } : {}),
         },
         body: JSON.stringify({
-          model: env.deepseekModel,
+          model: env.aiModel,
           messages: conversation,
           tools: TOOLS,
           tool_choice: "auto",
-          thinking: { type: "disabled" },
+          // DeepSeek-specific; omit it for a local OpenAI-compatible server.
+          ...(env.aiUsesDeepSeek ? { thinking: { type: "disabled" } } : {}),
           temperature: 0.1,
           max_tokens: 600,
           stream: false,
@@ -934,7 +935,7 @@ export async function runAdminAssistant(
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      console.error(`[admin-assistant] DeepSeek ${response.status}: ${detail.slice(0, 300)}`);
+      console.error(`[admin-assistant] ${env.aiModel} ${response.status}: ${detail.slice(0, 300)}`);
       throw new Error("ASSISTANT_UPSTREAM");
     }
 

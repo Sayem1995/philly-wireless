@@ -301,9 +301,9 @@ export const shopRouter = createRouter({
     return store.prices();
   }),
 
-  /* ---------- AI assistant (DeepSeek) ---------- */
+  /* ---------- AI assistant (OpenAI-compatible) ---------- */
   assistantStatus: publicQuery.query(() => ({
-    configured: Boolean(env.deepseekApiKey),
+    configured: env.aiConfigured,
   })),
 
   assistant: publicQuery
@@ -323,7 +323,7 @@ export const shopRouter = createRouter({
     .mutation(async ({ input, ctx }) => {
       enforceRateLimit(ctx, "assistant:chat", 30);
 
-      if (!env.deepseekApiKey) {
+      if (!env.aiConfigured) {
         throw new TRPCError({
           code: "PRECONDITION_FAILED",
           message:

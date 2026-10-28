@@ -320,8 +320,9 @@ export default function AdminAssistant() {
 
       {!status.isLoading && !configured && (
         <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] leading-relaxed text-amber-800">
-          The AI analyst isn’t connected. Add <code className="font-mono">DEEPSEEK_API_KEY</code> in
-          the Vercel project and redeploy. Inventory, orders and reports pages still work normally.
+          The AI analyst isn’t connected. Add an AI provider key in the Vercel project and
+          redeploy, or point <code className="font-mono">AI_BASE_URL</code> at your local model.
+          Inventory, orders and reports pages still work normally.
         </div>
       )}
 
