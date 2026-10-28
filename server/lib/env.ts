@@ -24,7 +24,6 @@ const deepseekModel = optional("DEEPSEEK_MODEL").trim() || "deepseek-flash";
 // The base URL should include /v1 when the server expects it, but not the
 // final /chat/completions path.
 const aiBaseUrl = (optional("AI_BASE_URL").trim() || "https://api.deepseek.com").replace(/\/+$/, "");
-const aiApiKey = optional("AI_API_KEY").trim() || deepseekApiKey;
 const aiModel = optional("AI_MODEL").trim() || deepseekModel;
 const aiUsesDeepSeek = (() => {
   try {
@@ -33,6 +32,11 @@ const aiUsesDeepSeek = (() => {
     return false;
   }
 })();
+// Only reuse the DeepSeek credential when the request is actually going to
+// DeepSeek. A custom base URL must supply its own key so we never leak the
+// DeepSeek secret to a local tunnel or another provider.
+const aiApiKey =
+  optional("AI_API_KEY").trim() || (aiUsesDeepSeek ? deepseekApiKey : "");
 
 export const env = {
   appId: optional("APP_ID"),
