@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Voice Lab — Local Only</title>
+    <style>
+      :root {
+        --ink: #2b1a18;
+        --burgundy: #7f1d1d;
+        --blush: #f3d5d8;
+        --ivory: #fffdf7;
+        --muted: #7d6a66;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(160deg, #fbf1ee, var(--ivory));
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      .card {
+        width: min(720px, 100%);
+        background: #fff;
+        border: 1px solid var(--blush);
+        border-radius: 28px;
+        padding: 32px;
+        box-shadow: 0 20px 60px rgba(43, 26, 24, 0.08);
+      }
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--burgundy);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(28px, 5vw, 38px);
+        font-weight: 500;
+      }
+      .sub { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 18px;
+        border-radius: 999px;
+        background: #f7f3ef;
+        padding: 7px 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .dot { width: 7px; height: 7px; border-radius: 50%; background: #c8b8b1; }
+      .dot.ok { background: #2f855a; }
+      .dot.bad { background: #c53030; }
+      .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0 18px; }
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 13px 20px;
+        font: inherit;
+        font-weight: 650;
+        cursor: pointer;
+        transition: transform 150ms ease, opacity 150ms ease;
+      }
+      button:hover:not(:disabled) { transform: translateY(-1px); }
+      button:disabled { cursor: wait; opacity: 0.5; }
+      .record { background: var(--burgundy); color: var(--ivory); }
+      .record.live { background: #b91c1c; }
+      .secondary { background: #f6e7e8; color: var(--burgundy); }
+      .transcript {
+        margin-top: 8px;
+        border: 1px solid var(--blush);
+        border-radius: 18px;
+        padding: 16px;
+        background: #fffaf8;
+        min-height: 74px;
+        white-space: pre-wrap;
+        line-height: 1.55;
+        font-size: 14px;
+      }
+      .label {
+        margin: 20px 0 7px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #9b807a;
+      }
+      .reply { font-size: 16px; }
+      .error {
+        margin-top: 16px;
+        border-radius: 14px;
+        background: #fff1f0;
+        padding: 12px 14px;
+        color: #9b1c1c;
+        font-size: 13px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+      .error:empty { display: none; }
+      .hint {
+        margin-top: 20px;
+        border-top: 1px solid #f2e6e3;
+        padding-top: 16px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      audio { width: 100%; margin-top: 10px; }
+      code { background: #f6efec; border-radius: 4px; padding: 1px 4px; }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <p class="eyebrow">Local test only · not deployed</p>
+      <h1>Voice Lab</h1>
+      <p class="sub">
+        Records your microphone, sends it to LFM3-Audio on
+        <code>localhost:8080</code>, and plays the spoken reply.
+      </p>
+
+      <div class="status">
+        <span class="dot" id="dot"></span>
+        <span id="status">Checking llama.cpp server…</span>
+      </div>
+
+      <div class="actions">
+        <button class="record" id="record" disabled>Start recording</button>
+        <button class="secondary" id="clear" disabled>Clear</button>
+      </div>
+
+      <div class="label">What the model heard</div>
+      <div class="transcript" id="heard">Nothing yet.</div>
+
+      <div class="label">Assistant reply</div>
+      <div class="transcript reply" id="reply">Nothing yet.</div>
+      <audio id="player" controls hidden></audio>
+
+      <div class="error" id="error"></div>
+
+      <p class="hint">
+        Start the model server first:
+        <br />
+        <code>llama-server.exe -m LFM3-Audio-2B-Q4_K_M.gguf --mmproj mmproj-LFM3-Audio-2B-Q8_0.gguf -c 8192</code>
+        <br />
+        Keep this page on <code>localhost</code>; microphone access needs a secure origin.
+      </p>
+    </main>
+
+    <script>
+      const BASE = "http://127.0.0.1:8080";
+      const recordButton = document.getElementById("record");
+      const clearButton = document.getElementById("clear");
+      const statusText = document.getElementById("status");
+      const dot = document.getElementById("dot");
+      const heard = document.getElementById("heard");
+      const reply = document.getElementById("reply");
+      const errorBox = document.getElementById("error");
+      const player = document.getElementById("player");
+
+      let modelId = "";
+      let recorder = null;
+      let chunks = [];
+      let stream = null;
+      let audioUrl = null;
+
+      function setStatus(message, kind) {
+        statusText.textContent = message;
+        dot.className = "dot" + (kind ? " " + kind : "");
+      }
+
+      function showError(message) {
+        errorBox.textContent = message || "";
+      }
+
+      function reset() {
+        heard.textContent = "Nothing yet.";
+        reply.textContent = "Nothing yet.";
+        showError("");
+        player.hidden = true;
+        player.removeAttribute("src");
+        if (audioUrl) URL.revokeObjectURL(audioUrl);
+        audioUrl = null;
+      }
+
+      async function findModel() {
+        try {
+          const response = await fetch(BASE + "/v1/models");
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          const data = await response.json();
+          modelId = data && data.data && data.data[0] ? data.data[0].id : "";
+          if (!modelId) throw new Error("No model loaded");
+          setStatus("Connected · " + modelId, "ok");
+          recordButton.disabled = false;
+          clearButton.disabled = false;
+        } catch (error) {
+          setStatus("Cannot reach llama.cpp on port 8080", "bad");
+          showError(
+            "Start llama-server with the LFM3-Audio model and mmproj, then reload this page.\n\n" +
+            String(error)
+          );
+        }
+      }
+
+      function encodeWav(audioBuffer, sampleRate) {
+        const samples = audioBuffer.getChannelData(0);
+        const buffer = new ArrayBuffer(44 + samples.length * 2);
+        const view = new DataView(buffer);
+        const write = (offset, text) => {
+          for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
+        };
+        write(0, "RIFF");
+        view.setUint32(4, 36 + samples.length * 2, true);
+        write(8, "WAVE");
+        write(12, "fmt ");
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        write(36, "data");
+        view.setUint32(40, samples.length * 2, true);
+        let offset = 44;
+        for (let i = 0; i < samples.length; i += 1) {
+          const sample = Math.max(-1, Math.min(1, samples[i]));
+          view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+          offset += 2;
+        }
+        return buffer;
+      }
+
+      async function toPcmWav(blob) {
+        const arrayBuffer = await blob.arrayBuffer();
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) throw new Error("Web Audio is not available in this browser.");
+        const context = new AudioContextClass();
+        const decoded = await context.decodeAudioData(arrayBuffer);
+        await context.close();
+
+        const sampleRate = 16000;
+        const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * sampleRate), sampleRate);
+        const source = offline.createBufferSource();
+        source.buffer = decoded;
+        source.connect(offline.destination);
+        source.start(0);
+        const rendered = await offline.startRendering();
+        return encodeWav(rendered, sampleRate);
+      }
+
+      function toBase64(arrayBuffer) {
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = "";
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+        }
+        return btoa(binary);
+      }
+
+      async function askModel(wavBuffer) {
+        const body = {
+          model: modelId,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are the Philly Phone Repair assistant. Answer the spoken question briefly and clearly. " +
+                "If you do not know a price or availability, say a free diagnostic is needed."
+            },
+            {
+              role: "user",
+              content: [
+                { type: "input_audio", input_audio: { data: toBase64(wavBuffer), format: "wav" } },
+                { type: "text", text: "Answer the question in the recording." }
+              ]
+            }
+          ],
+          max_tokens: 250,
+          temperature: 0,
+          stream: false
+        };
+
+        const response = await fetch(BASE + "/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        if (!response.ok) throw new Error("Model error HTTP " + response.status + "\n" + (await response.text()));
+        const data = await response.json();
+        const content = data && data.choices && data.choices[0] && data.choices[0].message
+          ? data.choices[0].message.content
+          : "";
+        const text = Array.isArray(content)
+          ? content.map((part) => (part && part.text) || "").join("")
+          : String(content || "");
+        if (!text.trim()) throw new Error("The model returned an empty reply.");
+        return text.trim();
+      }
+
+      async function speak(text) {
+        const response = await fetch(BASE + "/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: text, voice: "female", response_format: "wav" })
+        });
+        if (!response.ok) throw new Error("TTS error HTTP " + response.status + "\n" + (await response.text()));
+        const blob = await response.blob();
+        if (audioUrl) URL.revokeObjectURL(audioUrl);
+        audioUrl = URL.createObjectURL(blob);
+        player.src = audioUrl;
+        player.hidden = false;
+        try {
+          await player.play();
+        } catch {
+          showError("The spoken reply is ready. Press play on the audio player.");
+        }
+      }
+
+      async function stopRecording() {
+        if (!recorder || recorder.state === "inactive") return;
+        recorder.stop();
+      }
+
+      async function startRecording() {
+        reset();
+        recordButton.disabled = true;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+          });
+          chunks = [];
+          const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+          const mimeType = preferred.find((type) => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || "";
+          recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+          recorder.addEventListener("dataavailable", (event) => {
+            if (event.data && event.data.size) chunks.push(event.data);
+          });
+          recorder.addEventListener("stop", async () => {
+            recordButton.classList.remove("live");
+            recordButton.textContent = "Start recording";
+            recordButton.disabled = false;
+            stream.getTracks().forEach((track) => track.stop());
+            stream = null;
+            if (!chunks.length) {
+              showError("No audio was recorded.");
+              return;
+            }
+            setStatus("Transcribing and thinking…");
+            try {
+              const raw = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+              const wav = await toPcmWav(raw);
+              heard.textContent = "Listening to your recording…";
+              const answer = await askModel(wav);
+              heard.textContent = "Audio sent to LFM3-Audio (" + Math.round(wav.byteLength / 1024) + " KB WAV)";
+              reply.textContent = answer;
+              setStatus("Generating speech…");
+              await speak(answer);
+              setStatus("Connected · " + modelId, "ok");
+            } catch (error) {
+              showError(String(error && error.message ? error.message : error));
+              setStatus("Voice request failed", "bad");
+            }
+          });
+          recorder.start();
+          recordButton.classList.add("live");
+          recordButton.textContent = "Stop and ask";
+          setStatus("Recording… speak now");
+        } catch (error) {
+          recordButton.disabled = false;
+          showError("Microphone error: " + String(error));
+          setStatus("Microphone unavailable", "bad");
+        }
+      }
+
+      recordButton.addEventListener("click", () => {
+        if (recorder && recorder.state === "recording") void stopRecording();
+        else void startRecording();
+      });
+      clearButton.addEventListener("click", reset);
+
+      void findModel();
+    </script>
+  </body>
+</html>
