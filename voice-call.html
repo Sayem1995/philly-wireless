@@ -177,7 +177,7 @@
 
         <div class="actions">
           <button class="round" id="end" disabled title="End call" aria-label="End call">✕</button>
-          <button class="talk" id="talk" disabled>
+          <button class="talk" id="talk">
             Start call
             <span class="small" id="talkHint">tap to begin</span>
           </button>
@@ -500,7 +500,7 @@
             callActive = false;
             ready = false;
             recording = false;
-            talkButton.disabled = true;
+            talkButton.disabled = false;
             endButton.disabled = true;
             talkButton.firstChild.nodeValue = "Start call";
             talkHint.textContent = "tap to begin";
@@ -530,7 +530,7 @@
         recording = false;
         if (socket && socket.readyState <= WebSocket.OPEN) socket.close();
         socket = null;
-        talkButton.disabled = true;
+        talkButton.disabled = false;
         endButton.disabled = true;
         muteButton.disabled = true;
         talkButton.firstChild.nodeValue = "Start call";
