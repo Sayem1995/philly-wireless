@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex,nofollow" />
+    <meta http-equiv="Cache-Control" content="no-store, max-age=0" />
     <title>Realtime Call Lab — Local Only</title>
     <style>
       :root {
@@ -159,7 +160,7 @@
   <body>
     <main class="phone">
       <header class="top">
-        <p class="eyebrow">Local test only · not deployed</p>
+        <p class="eyebrow">Local test only · not deployed · call build 3</p>
         <h1>Philly Phone Repair</h1>
         <p class="sub">Realtime voice call · LFM3-Audio · speak naturally</p>
         <div class="status-row">
@@ -232,6 +233,7 @@
       let nextPlayTime = 0;
       let scheduled = [];
       let audioSent = false;
+      let generating = false;
       let currentReply = "";
       let assistantBubble = null;
       let startedAt = 0;
@@ -374,9 +376,8 @@
         if (!ready || recording) return;
         if (playbackContext) void playbackContext.resume();
         stopPlayback();
-        if (socket && socket.readyState === WebSocket.OPEN) {
+        if (generating && socket && socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: "response.cancel" }));
-          socket.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
         }
         currentReply = "";
         assistantBubble = null;
@@ -402,6 +403,7 @@
         }
         setStatus("Thinking…");
         if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
           socket.send(JSON.stringify({ type: "response.create" }));
         }
       }
@@ -447,6 +449,7 @@
         }
 
         if (message.type === "response.created") {
+          generating = true;
           currentReply = "";
           if (!assistantBubble) assistantBubble = addBubble("", "assistant");
           setStatus("Assistant speaking…", "ok");
@@ -467,6 +470,7 @@
         }
 
         if (message.type === "response.done") {
+          generating = false;
           assistantBubble = null;
           if (ready) {
             setStatus("Connected · tap Talk", "ok");
@@ -478,6 +482,7 @@
         }
 
         if (message.type === "error") {
+          generating = false;
           const detail = message.error?.message || "The local model returned an error.";
           showError(detail);
           setStatus("Call error", "bad");
@@ -516,6 +521,7 @@
             setStatus("Call ended");
             stopMic();
             stopPlayback();
+            generating = false;
             if (playbackContext) {
               void playbackContext.close();
               playbackContext = null;
