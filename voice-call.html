@@ -231,6 +231,7 @@
       let silentGain = null;
       let nextPlayTime = 0;
       let scheduled = [];
+      let audioSent = false;
       let currentReply = "";
       let assistantBubble = null;
       let startedAt = 0;
@@ -333,7 +334,7 @@
       }
 
       function startMic() {
-        if (!micStream) return;
+        if (!micStream || micContext) return;
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         micContext = new AudioContextClass();
         void micContext.resume();
@@ -351,6 +352,7 @@
           const resampled = downsample(input, micContext.sampleRate, inputRate);
           const pcm = floatToPcm16(resampled);
           socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: bytesToBase64(pcm) }));
+          audioSent = true;
         };
       }
 
@@ -378,6 +380,7 @@
         }
         currentReply = "";
         assistantBubble = null;
+        audioSent = false;
         recording = true;
         talkButton.classList.add("live");
         talkButton.firstChild.nodeValue = "Stop talking";
@@ -392,6 +395,11 @@
         talkButton.classList.remove("live");
         talkButton.firstChild.nodeValue = "Talk";
         talkHint.textContent = "tap to speak";
+        if (!audioSent) {
+          setStatus("No audio captured", "bad");
+          showError("No audio reached the server. Check that the microphone is allowed, tap Talk, and speak for at least a second.");
+          return;
+        }
         setStatus("Thinking…");
         if (socket && socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: "response.create" }));
@@ -489,6 +497,7 @@
           micStream = await navigator.mediaDevices.getUserMedia({
             audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
           });
+          startMic();
 
           socket = new WebSocket(WS_URL);
           socket.addEventListener("message", handleEvent);
