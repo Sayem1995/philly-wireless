@@ -160,9 +160,9 @@
   <body>
     <main class="phone">
       <header class="top">
-        <p class="eyebrow">Local test only · not deployed · call build 3</p>
+        <p class="eyebrow">Local test only · not deployed · call build 4</p>
         <h1>Philly Phone Repair</h1>
-        <p class="sub">Realtime voice call · LFM3-Audio · speak naturally</p>
+        <p class="sub">Realtime voice call · LFM3-Audio · pause to send</p>
         <div class="status-row">
           <span class="status"><span class="dot" id="dot"></span><span id="status">Not connected</span></span>
           <span class="timer" id="timer">00:00</span>
@@ -172,7 +172,7 @@
       <section class="body">
         <div class="transcript" id="transcript">
           <div class="bubble system" id="greeting">
-            Tap “Start call”, allow the microphone, then tap “Talk”. Tap “Talk” again when you finish speaking.
+            Tap “Start call” and allow the microphone. Then just speak normally. When you pause for about a second, the assistant will answer.
           </div>
         </div>
 
@@ -188,8 +188,8 @@
         <div class="error" id="error"></div>
 
         <p class="hint">
-          Keep llama-server running on <code>127.0.0.1:8080</code> with the audio model and
-          <code>--mmproj</code>. Use headphones while testing to avoid echo.
+          Auto mode is on after the call connects. Speak, then pause briefly; the assistant answers.
+          Keep llama-server running on <code>127.0.0.1:8080</code>, and use headphones to avoid echo.
         </p>
       </section>
     </main>
@@ -217,10 +217,18 @@
         "Respond with interleaved text and audio."
       ].join(" ");
 
+      const VAD_THRESHOLD = 0.012;
+      const SILENCE_MS = 900;
+      const MIN_SPEECH_MS = 300;
+
       let socket = null;
       let callActive = false;
       let ready = false;
-      let recording = false;
+      let autoListening = false;
+      let userSpeaking = false;
+      let waitingForReply = false;
+      let lastVoiceAt = 0;
+      let speechStartedAt = 0;
       let muted = false;
       let inputRate = 16000;
       let outputRate = 24000;
@@ -236,6 +244,7 @@
       let generating = false;
       let currentReply = "";
       let assistantBubble = null;
+      let previousPcm = null;
       let startedAt = 0;
       let timerHandle = null;
 
@@ -349,12 +358,55 @@
         silentGain.connect(micContext.destination);
 
         processor.onaudioprocess = (event) => {
-          if (!recording || muted || !socket || socket.readyState !== WebSocket.OPEN) return;
+          if (!socket || socket.readyState !== WebSocket.OPEN) return;
           const input = event.inputBuffer.getChannelData(0);
-          const resampled = downsample(input, micContext.sampleRate, inputRate);
-          const pcm = floatToPcm16(resampled);
-          socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: bytesToBase64(pcm) }));
-          audioSent = true;
+          const pcm = floatToPcm16(downsample(input, micContext.sampleRate, inputRate));
+          let sum = 0;
+          for (let i = 0; i < input.length; i += 1) sum += input[i] * input[i];
+          const level = Math.sqrt(sum / input.length);
+          const now = performance.now();
+
+          if (!autoListening || muted || waitingForReply) {
+            previousPcm = pcm;
+            return;
+          }
+
+          if (level >= VAD_THRESHOLD) {
+            if (!userSpeaking) {
+              userSpeaking = true;
+              speechStartedAt = now;
+              audioSent = false;
+              stopPlayback();
+              if (generating && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: "response.cancel" }));
+                generating = false;
+              }
+              setStatus("Hearing you…", "ok");
+              setTalkLabel("Talking", "pause to send");
+              talkButton.classList.add("live");
+              if (previousPcm) {
+                socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: bytesToBase64(previousPcm) }));
+                audioSent = true;
+              }
+            }
+            lastVoiceAt = now;
+          }
+
+          if (userSpeaking) {
+            socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: bytesToBase64(pcm) }));
+            audioSent = true;
+            if (level < VAD_THRESHOLD && now - lastVoiceAt >= SILENCE_MS) {
+              if (now - speechStartedAt >= MIN_SPEECH_MS) finishTurn();
+              else {
+                userSpeaking = false;
+                setTalkLabel("Listening", "just speak");
+                setStatus("Listening…", "ok");
+                talkButton.classList.remove("live");
+              }
+            }
+          }
+
+          previousPcm = pcm;
         };
       }
 
@@ -372,36 +424,39 @@
         micStream = null;
       }
 
-      function beginTalk() {
-        if (!ready || recording) return;
-        if (playbackContext) void playbackContext.resume();
-        stopPlayback();
-        if (generating && socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: "response.cancel" }));
-        }
-        currentReply = "";
-        assistantBubble = null;
-        audioSent = false;
-        recording = true;
-        talkButton.classList.add("live");
-        talkButton.firstChild.nodeValue = "Stop talking";
-        talkHint.textContent = "tap when finished";
-        setStatus("Listening…", "ok");
-        showError("");
+      function setTalkLabel(label, hint) {
+        talkButton.firstChild.nodeValue = label;
+        talkHint.textContent = hint;
       }
 
-      function endTalk() {
-        if (!recording) return;
-        recording = false;
+      function resumeListening() {
+        if (!callActive || !ready || muted) return;
+        autoListening = true;
+        waitingForReply = false;
+        userSpeaking = false;
+        audioSent = false;
         talkButton.classList.remove("live");
-        talkButton.firstChild.nodeValue = "Talk";
-        talkHint.textContent = "tap to speak";
+        setTalkLabel("Listening", "pause to send");
+        setStatus("Listening…", "ok");
+        if (playbackContext) void playbackContext.resume();
+      }
+
+      function finishTurn() {
+        if (!autoListening || waitingForReply) return;
         if (!audioSent) {
-          setStatus("No audio captured", "bad");
-          showError("No audio reached the server. Check that the microphone is allowed, tap Talk, and speak for at least a second.");
+          userSpeaking = false;
+          talkButton.classList.remove("live");
+          setTalkLabel("Listening", "just speak");
+          setStatus("Listening…", "ok");
           return;
         }
+        userSpeaking = false;
+        autoListening = false;
+        waitingForReply = true;
+        talkButton.classList.remove("live");
+        setTalkLabel("Thinking", "please wait");
         setStatus("Thinking…");
+        showError("");
         if (socket && socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
           socket.send(JSON.stringify({ type: "response.create" }));
@@ -439,17 +494,18 @@
 
         if (message.type === "session.updated") {
           ready = true;
-          setStatus("Connected · tap Talk", "ok");
           talkButton.disabled = false;
-          talkButton.firstChild.nodeValue = "Talk";
-          talkHint.textContent = "tap to speak";
           endButton.disabled = false;
           muteButton.disabled = false;
+          resumeListening();
           return;
         }
 
         if (message.type === "response.created") {
           generating = true;
+          waitingForReply = true;
+          autoListening = false;
+          setTalkLabel("Speaking", "tap to interrupt");
           currentReply = "";
           if (!assistantBubble) assistantBubble = addBubble("", "assistant");
           setStatus("Assistant speaking…", "ok");
@@ -472,12 +528,7 @@
         if (message.type === "response.done") {
           generating = false;
           assistantBubble = null;
-          if (ready) {
-            setStatus("Connected · tap Talk", "ok");
-            talkHint.textContent = "tap to speak";
-            talkButton.firstChild.nodeValue = "Talk";
-            talkButton.classList.remove("live");
-          }
+          resumeListening();
           return;
         }
 
@@ -486,9 +537,11 @@
           const detail = message.error?.message || "The local model returned an error.";
           showError(detail);
           setStatus("Call error", "bad");
-          recording = false;
+          autoListening = false;
+          waitingForReply = false;
+          userSpeaking = false;
           talkButton.classList.remove("live");
-          talkButton.firstChild.nodeValue = "Talk";
+          setTalkLabel("Retry", "tap to listen again");
           return;
         }
       }
@@ -500,7 +553,7 @@
         setStatus("Connecting…");
         try {
           micStream = await navigator.mediaDevices.getUserMedia({
-            audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+            audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
           });
           startMic();
 
@@ -513,7 +566,9 @@
           socket.addEventListener("close", () => {
             callActive = false;
             ready = false;
-            recording = false;
+            autoListening = false;
+            waitingForReply = false;
+            userSpeaking = false;
             talkButton.disabled = false;
             endButton.disabled = true;
             talkButton.firstChild.nodeValue = "Start call";
@@ -542,7 +597,9 @@
 
       function endCall() {
         ready = false;
-        recording = false;
+        autoListening = false;
+        waitingForReply = false;
+        userSpeaking = false;
         if (socket && socket.readyState <= WebSocket.OPEN) socket.close();
         socket = null;
         talkButton.disabled = false;
@@ -566,8 +623,18 @@
           return;
         }
         if (!ready) return;
-        if (recording) endTalk();
-        else beginTalk();
+        if (generating) {
+          generating = false;
+          waitingForReply = false;
+          stopPlayback();
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "response.cancel" }));
+          }
+          resumeListening();
+          setStatus("Interrupted — listening…", "ok");
+          return;
+        }
+        if (userSpeaking) finishTurn();
       });
 
       endButton.addEventListener("click", endCall);
@@ -575,7 +642,14 @@
         muted = !muted;
         muteButton.textContent = muted ? "◌" : "◉";
         muteButton.title = muted ? "Unmute microphone" : "Mute microphone";
-        setStatus(muted ? "Muted" : "Connected · tap Talk", muted ? "" : "ok");
+        if (muted) {
+          autoListening = false;
+          userSpeaking = false;
+          setTalkLabel("Muted", "unmute to talk");
+          setStatus("Muted", "");
+        } else {
+          resumeListening();
+        }
       });
     </script>
   </body>
