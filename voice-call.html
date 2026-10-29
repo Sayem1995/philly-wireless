@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Realtime Call Lab — Local Only</title>
+    <style>
+      :root {
+        --ink: #2b1a18;
+        --burgundy: #7f1d1d;
+        --blush: #f3d5d8;
+        --ivory: #fffdf7;
+        --muted: #7d6a66;
+        --green: #2f855a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at top, #fdf2ef 0, #f7ebe7 45%, #f2e2de 100%);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      .phone {
+        width: min(560px, 100%);
+        background: #fff;
+        border: 1px solid var(--blush);
+        border-radius: 34px;
+        box-shadow: 0 30px 80px rgba(43, 26, 24, 0.14);
+        overflow: hidden;
+      }
+      .top {
+        background: linear-gradient(145deg, #5c1515, #7f1d1d 60%, #9b2c2c);
+        color: var(--ivory);
+        padding: 26px 28px 28px;
+      }
+      .eyebrow {
+        margin: 0 0 8px;
+        color: #f3d5d8;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(28px, 6vw, 36px);
+        font-weight: 500;
+      }
+      .sub { margin: 8px 0 0; color: rgba(255, 253, 247, 0.72); font-size: 13px; line-height: 1.5; }
+      .status-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 20px;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        background: rgba(255, 253, 247, 0.12);
+        padding: 7px 12px;
+        font-size: 12px;
+      }
+      .dot { width: 7px; height: 7px; border-radius: 50%; background: #d8b8b8; }
+      .dot.ok { background: #7ee2a8; }
+      .dot.bad { background: #ffb4a8; }
+      .timer {
+        color: rgba(255, 253, 247, 0.55);
+        font-variant-numeric: tabular-nums;
+        font-size: 12px;
+      }
+      .body { padding: 24px 28px 28px; }
+      .transcript {
+        min-height: 160px;
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #f0e3df;
+        border-radius: 20px;
+        background: #fffaf8;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .bubble {
+        max-width: 88%;
+        border-radius: 16px;
+        padding: 10px 13px;
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+      .bubble.assistant { background: #f7e8e9; color: var(--ink); align-self: flex-start; }
+      .bubble.user { background: #f3f4f6; color: #4b5563; align-self: flex-end; }
+      .bubble.system { background: transparent; color: #9b807a; font-size: 12px; align-self: center; text-align: center; }
+      .actions { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 22px; }
+      .talk {
+        width: 112px;
+        height: 112px;
+        border-radius: 50%;
+        border: 0;
+        background: var(--burgundy);
+        color: var(--ivory);
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+        font-size: 14px;
+        display: grid;
+        place-items: center;
+        gap: 2px;
+        box-shadow: 0 12px 28px rgba(127, 29, 29, 0.28);
+        transition: transform 150ms ease, background 150ms ease, opacity 150ms ease;
+      }
+      .talk:hover:not(:disabled) { transform: translateY(-2px); }
+      .talk:disabled { cursor: wait; opacity: 0.45; }
+      .talk.live { background: #b91c1c; animation: pulse 1.4s infinite; }
+      .talk .small { display: block; font-size: 10px; font-weight: 500; opacity: 0.75; }
+      .round {
+        width: 44px; height: 44px; border-radius: 50%; border: 1px solid #eadbd7;
+        background: #fff; color: var(--muted); cursor: pointer; font-size: 16px;
+      }
+      .round:hover:not(:disabled) { border-color: var(--burgundy); color: var(--burgundy); }
+      .round:disabled { opacity: 0.4; cursor: wait; }
+      .error {
+        margin-top: 16px;
+        border-radius: 14px;
+        background: #fff1f0;
+        padding: 12px 14px;
+        color: #9b1c1c;
+        font-size: 12.5px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+      .error:empty { display: none; }
+      .hint {
+        margin: 18px 0 0;
+        border-top: 1px solid #f2e6e3;
+        padding-top: 14px;
+        color: var(--muted);
+        font-size: 11.5px;
+        line-height: 1.6;
+        text-align: center;
+      }
+      code { background: #f6efec; border-radius: 4px; padding: 1px 4px; }
+      @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(185, 28, 28, 0.35); }
+        50% { box-shadow: 0 0 0 14px rgba(185, 28, 28, 0); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="phone">
+      <header class="top">
+        <p class="eyebrow">Local test only · not deployed</p>
+        <h1>Philly Phone Repair</h1>
+        <p class="sub">Realtime voice call · LFM3-Audio · speak naturally</p>
+        <div class="status-row">
+          <span class="status"><span class="dot" id="dot"></span><span id="status">Not connected</span></span>
+          <span class="timer" id="timer">00:00</span>
+        </div>
+      </header>
+
+      <section class="body">
+        <div class="transcript" id="transcript">
+          <div class="bubble system" id="greeting">
+            Tap “Start call”, allow the microphone, then tap “Talk”. Tap “Talk” again when you finish speaking.
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="round" id="end" disabled title="End call" aria-label="End call">✕</button>
+          <button class="talk" id="talk" disabled>
+            Start call
+            <span class="small" id="talkHint">tap to begin</span>
+          </button>
+          <button class="round" id="mute" disabled title="Mute microphone" aria-label="Mute microphone">◉</button>
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <p class="hint">
+          Keep llama-server running on <code>127.0.0.1:8080</code> with the audio model and
+          <code>--mmproj</code>. Use headphones while testing to avoid echo.
+        </p>
+      </section>
+    </main>
+
+    <script>
+      const WS_URL = (location.protocol === "https:" ? "wss://" : "ws://") + "127.0.0.1:8080/v1/realtime";
+      const statusText = document.getElementById("status");
+      const dot = document.getElementById("dot");
+      const transcript = document.getElementById("transcript");
+      const greeting = document.getElementById("greeting");
+      const talkButton = document.getElementById("talk");
+      const talkHint = document.getElementById("talkHint");
+      const endButton = document.getElementById("end");
+      const muteButton = document.getElementById("mute");
+      const errorBox = document.getElementById("error");
+      const timer = document.getElementById("timer");
+
+      const INSTRUCTIONS = [
+        "You are the live phone assistant for Philly Phone Repair at 1033 Chestnut Street, Philadelphia.",
+        "Phone: (814) 384-1507. Hours: Mon-Thu 9am-7pm, Fri-Sat 10am-10pm, Sun 11am-9pm.",
+        "Answer the caller's question directly in one or two short sentences.",
+        "Do not transcribe or repeat the question. Be warm, direct, and conversational.",
+        "For repair prices, give a starting range only when you know it; otherwise say a free diagnostic is needed.",
+        "Never invent availability. For booking, direct the caller to /book or the phone number.",
+        "Respond with interleaved text and audio."
+      ].join(" ");
+
+      let socket = null;
+      let callActive = false;
+      let ready = false;
+      let recording = false;
+      let muted = false;
+      let inputRate = 16000;
+      let outputRate = 24000;
+      let micContext = null;
+      let playbackContext = null;
+      let micStream = null;
+      let processor = null;
+      let sourceNode = null;
+      let silentGain = null;
+      let nextPlayTime = 0;
+      let scheduled = [];
+      let currentReply = "";
+      let assistantBubble = null;
+      let startedAt = 0;
+      let timerHandle = null;
+
+      function setStatus(message, kind) {
+        statusText.textContent = message;
+        dot.className = "dot" + (kind ? " " + kind : "");
+      }
+
+      function showError(message) {
+        errorBox.textContent = message || "";
+      }
+
+      function addBubble(text, kind) {
+        const bubble = document.createElement("div");
+        bubble.className = "bubble " + kind;
+        bubble.textContent = text;
+        transcript.appendChild(bubble);
+        transcript.scrollTop = transcript.scrollHeight;
+        return bubble;
+      }
+
+      function startTimer() {
+        startedAt = Date.now();
+        if (timerHandle) clearInterval(timerHandle);
+        timerHandle = setInterval(() => {
+          const seconds = Math.floor((Date.now() - startedAt) / 1000);
+          timer.textContent = String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0");
+        }, 1000);
+      }
+
+      function stopTimer() {
+        if (timerHandle) clearInterval(timerHandle);
+        timerHandle = null;
+        timer.textContent = "00:00";
+      }
+
+      function bytesToBase64(bytes) {
+        let binary = "";
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        return btoa(binary);
+      }
+
+      function base64ToBytes(value) {
+        const binary = atob(value);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+        return bytes;
+      }
+
+      function downsample(input, fromRate, toRate) {
+        if (fromRate === toRate) return input;
+        const ratio = fromRate / toRate;
+        const length = Math.max(1, Math.round(input.length / ratio));
+        const output = new Float32Array(length);
+        for (let i = 0; i < length; i += 1) output[i] = input[Math.min(input.length - 1, Math.floor(i * ratio))];
+        return output;
+      }
+
+      function floatToPcm16(input) {
+        const pcm = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i += 1) {
+          const sample = Math.max(-1, Math.min(1, input[i]));
+          pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        }
+        return new Uint8Array(pcm.buffer);
+      }
+
+      function stopPlayback() {
+        for (const source of scheduled) {
+          try { source.stop(); } catch { /* already stopped */ }
+        }
+        scheduled = [];
+        nextPlayTime = 0;
+      }
+
+      function playAudioDelta(base64) {
+        if (!playbackContext) return;
+        const bytes = base64ToBytes(base64);
+        if (!bytes.length) return;
+        const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2));
+        if (!pcm.length) return;
+        const buffer = playbackContext.createBuffer(1, pcm.length, outputRate);
+        const channel = buffer.getChannelData(0);
+        for (let i = 0; i < pcm.length; i += 1) channel[i] = pcm[i] / 32768;
+        const source = playbackContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(playbackContext.destination);
+        const startAt = Math.max(playbackContext.currentTime + 0.04, nextPlayTime);
+        source.start(startAt);
+        nextPlayTime = startAt + buffer.duration;
+        scheduled.push(source);
+        source.onended = () => {
+          scheduled = scheduled.filter((item) => item !== source);
+        };
+      }
+
+      function startMic() {
+        if (!micStream) return;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        micContext = new AudioContextClass();
+        void micContext.resume();
+        sourceNode = micContext.createMediaStreamSource(micStream);
+        processor = micContext.createScriptProcessor(4096, 1, 1);
+        silentGain = micContext.createGain();
+        silentGain.gain.value = 0;
+        sourceNode.connect(processor);
+        processor.connect(silentGain);
+        silentGain.connect(micContext.destination);
+
+        processor.onaudioprocess = (event) => {
+          if (!recording || muted || !socket || socket.readyState !== WebSocket.OPEN) return;
+          const input = event.inputBuffer.getChannelData(0);
+          const resampled = downsample(input, micContext.sampleRate, inputRate);
+          const pcm = floatToPcm16(resampled);
+          socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: bytesToBase64(pcm) }));
+        };
+      }
+
+      function stopMic() {
+        if (processor) processor.onaudioprocess = null;
+        try { sourceNode && sourceNode.disconnect(); } catch { /* noop */ }
+        try { processor && processor.disconnect(); } catch { /* noop */ }
+        try { silentGain && silentGain.disconnect(); } catch { /* noop */ }
+        if (micContext) void micContext.close();
+        if (micStream) micStream.getTracks().forEach((track) => track.stop());
+        micContext = null;
+        sourceNode = null;
+        processor = null;
+        silentGain = null;
+        micStream = null;
+      }
+
+      function beginTalk() {
+        if (!ready || recording) return;
+        if (playbackContext) void playbackContext.resume();
+        stopPlayback();
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "response.cancel" }));
+          socket.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+        }
+        currentReply = "";
+        assistantBubble = null;
+        recording = true;
+        talkButton.classList.add("live");
+        talkButton.firstChild.nodeValue = "Stop talking";
+        talkHint.textContent = "tap when finished";
+        setStatus("Listening…", "ok");
+        showError("");
+      }
+
+      function endTalk() {
+        if (!recording) return;
+        recording = false;
+        talkButton.classList.remove("live");
+        talkButton.firstChild.nodeValue = "Talk";
+        talkHint.textContent = "tap to speak";
+        setStatus("Thinking…");
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "response.create" }));
+        }
+      }
+
+      function handleEvent(event) {
+        let message;
+        try { message = JSON.parse(event.data); } catch { return; }
+
+        if (message.type === "session.created") {
+          const session = message.session || {};
+          inputRate = session.audio?.input?.format?.rate || 16000;
+          outputRate = session.audio?.output?.format?.rate || 24000;
+          if (!playbackContext) {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            try {
+              playbackContext = new AudioContextClass({ sampleRate: outputRate });
+            } catch {
+              playbackContext = new AudioContextClass();
+            }
+            void playbackContext.resume();
+          }
+          socket.send(JSON.stringify({
+            type: "session.update",
+            session: {
+              type: "realtime",
+              instructions: INSTRUCTIONS,
+              output_modalities: ["text", "audio"],
+              max_output_tokens: 300
+            }
+          }));
+          return;
+        }
+
+        if (message.type === "session.updated") {
+          ready = true;
+          setStatus("Connected · tap Talk", "ok");
+          talkButton.disabled = false;
+          talkButton.firstChild.nodeValue = "Talk";
+          talkHint.textContent = "tap to speak";
+          endButton.disabled = false;
+          muteButton.disabled = false;
+          return;
+        }
+
+        if (message.type === "response.created") {
+          currentReply = "";
+          if (!assistantBubble) assistantBubble = addBubble("", "assistant");
+          setStatus("Assistant speaking…", "ok");
+          return;
+        }
+
+        if (message.type === "response.output_text.delta") {
+          currentReply += message.delta || "";
+          if (!assistantBubble) assistantBubble = addBubble("", "assistant");
+          assistantBubble.textContent = currentReply;
+          transcript.scrollTop = transcript.scrollHeight;
+          return;
+        }
+
+        if (message.type === "response.output_audio.delta") {
+          playAudioDelta(message.delta || "");
+          return;
+        }
+
+        if (message.type === "response.done") {
+          assistantBubble = null;
+          if (ready) {
+            setStatus("Connected · tap Talk", "ok");
+            talkHint.textContent = "tap to speak";
+            talkButton.firstChild.nodeValue = "Talk";
+            talkButton.classList.remove("live");
+          }
+          return;
+        }
+
+        if (message.type === "error") {
+          const detail = message.error?.message || "The local model returned an error.";
+          showError(detail);
+          setStatus("Call error", "bad");
+          recording = false;
+          talkButton.classList.remove("live");
+          talkButton.firstChild.nodeValue = "Talk";
+          return;
+        }
+      }
+
+      async function startCall() {
+        showError("");
+        talkButton.disabled = true;
+        endButton.disabled = true;
+        setStatus("Connecting…");
+        try {
+          micStream = await navigator.mediaDevices.getUserMedia({
+            audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+          });
+
+          socket = new WebSocket(WS_URL);
+          socket.addEventListener("message", handleEvent);
+          socket.addEventListener("error", () => {
+            showError("Cannot reach llama.cpp at 127.0.0.1:8080. Start llama-server with the audio model and --mmproj.");
+            setStatus("Connection failed", "bad");
+          });
+          socket.addEventListener("close", () => {
+            callActive = false;
+            ready = false;
+            recording = false;
+            talkButton.disabled = true;
+            endButton.disabled = true;
+            talkButton.firstChild.nodeValue = "Start call";
+            talkHint.textContent = "tap to begin";
+            setStatus("Call ended");
+            stopMic();
+            stopPlayback();
+            if (playbackContext) {
+              void playbackContext.close();
+              playbackContext = null;
+            }
+            stopTimer();
+          });
+          socket.addEventListener("open", () => {
+            callActive = true;
+            startTimer();
+            setStatus("Starting session…");
+          });
+        } catch (error) {
+          talkButton.disabled = false;
+          showError("Microphone error: " + String(error));
+          setStatus("Microphone unavailable", "bad");
+        }
+      }
+
+      function endCall() {
+        ready = false;
+        recording = false;
+        if (socket && socket.readyState <= WebSocket.OPEN) socket.close();
+        socket = null;
+        talkButton.disabled = true;
+        endButton.disabled = true;
+        muteButton.disabled = true;
+        talkButton.firstChild.nodeValue = "Start call";
+        talkHint.textContent = "tap to begin";
+        setStatus("Call ended");
+        stopMic();
+        stopPlayback();
+        if (playbackContext) {
+          void playbackContext.close();
+          playbackContext = null;
+        }
+        stopTimer();
+      }
+
+      talkButton.addEventListener("click", () => {
+        if (!callActive) {
+          void startCall();
+          return;
+        }
+        if (!ready) return;
+        if (recording) endTalk();
+        else beginTalk();
+      });
+
+      endButton.addEventListener("click", endCall);
+      muteButton.addEventListener("click", () => {
+        muted = !muted;
+        muteButton.textContent = muted ? "◌" : "◉";
+        muteButton.title = muted ? "Unmute microphone" : "Mute microphone";
+        setStatus(muted ? "Muted" : "Connected · tap Talk", muted ? "" : "ok");
+      });
+    </script>
+  </body>
+</html>
