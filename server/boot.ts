@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
@@ -16,6 +17,7 @@ import {
   webhookConfigured,
 } from "./payments.js";
 import { handleStripeEvent } from "./stripeWebhook.js";
+import { executeTool } from "./assistant.js";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -157,6 +159,57 @@ app.get("/api/cron/reconcile-orders", async (c) => {
 
   const result = await reconcileAbandonedOrders(new Date(), 100);
   return c.json({ ok: true, ...result });
+});
+
+/**
+ * Read-only tools for the local realtime voice lab.
+ *
+ * The voice page runs on localhost, but llama-server cannot reach Firestore.
+ * The production backend has the database credentials, so the page calls this
+ * endpoint for live store data. Every tool is public, read-only information
+ * already exposed on the website.
+ */
+app.use(
+  "/api/voice/*",
+  cors({
+    origin: "*",
+    allowMethods: ["POST", "OPTIONS"],
+    allowHeaders: ["Content-Type"],
+  }),
+);
+
+app.post("/api/voice/tool", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "Invalid JSON body." }, 400);
+  }
+  if (!body || typeof body !== "object") {
+    return c.json({ error: "Invalid request." }, 400);
+  }
+  const input = body as { name?: unknown; arguments?: unknown };
+  const name = typeof input.name === "string" ? input.name : "";
+  const allowed = [
+    "get_store_info",
+    "search_repair_prices",
+    "estimate_repair_price",
+    "check_availability",
+  ];
+  if (!allowed.includes(name)) {
+    return c.json({ error: "Unknown voice tool." }, 400);
+  }
+  const rawArguments =
+    typeof input.arguments === "string"
+      ? input.arguments
+      : JSON.stringify(input.arguments && typeof input.arguments === "object" ? input.arguments : {});
+  try {
+    const result = await executeTool(name, rawArguments);
+    return c.json(result);
+  } catch (error) {
+    console.error("[voice-tool] failed", name, error);
+    return c.json({ error: "The live data lookup failed." }, 500);
+  }
 });
 
 // Handle tRPC + any other /api routes

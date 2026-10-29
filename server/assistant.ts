@@ -3,6 +3,7 @@ import { longHours } from "../contracts/brand.js";
 import { STORE, TIME_SLOTS } from "../contracts/constants.js";
 import { store } from "./queries/store.js";
 import { env } from "./lib/env.js";
+import { estimateRepair } from "../contracts/repairEstimates.js";
 
 /**
  * DeepSeek-powered assistant.
@@ -80,7 +81,7 @@ function jsonResult(value: ToolResult): string {
   return JSON.stringify(value);
 }
 
-async function executeTool(name: string, rawArguments: string): Promise<ToolResult> {
+export async function executeTool(name: string, rawArguments: string): Promise<ToolResult> {
   let args: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(rawArguments || "{}");
@@ -149,6 +150,33 @@ async function executeTool(name: string, rawArguments: string): Promise<ToolResu
       note: matches.length === 0
         ? "No listed price matched. Do not guess; offer a free diagnostic."
         : "These are the live listed prices. If a row says 'Call', do not invent a number.",
+    };
+  }
+
+  if (name === "estimate_repair_price") {
+    const deviceType = typeof args.deviceType === "string" ? args.deviceType.trim() : "";
+    const brand = typeof args.brand === "string" ? args.brand.trim() : "";
+    const model = typeof args.model === "string" ? args.model.trim() : "";
+    const service = typeof args.service === "string" ? args.service.trim() : "";
+    if (!deviceType || !brand || !model || !service) {
+      return { error: "deviceType, brand, model and service are required." };
+    }
+    const estimate = estimateRepair(deviceType, brand, model, service);
+    if (!estimate) {
+      return {
+        error: "No market estimate is available for that combination.",
+        note: "Offer a free diagnostic or ask for the exact model and repair.",
+      };
+    }
+    return {
+      deviceType,
+      brand,
+      model,
+      service,
+      price: estimate.label,
+      fromCents: estimate.fromCents,
+      note: estimate.note,
+      source: "market_estimate",
     };
   }
 
@@ -228,6 +256,24 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "estimate_repair_price",
+      description:
+        "Get a model-specific market starting price for a repair. Use after the customer gives the device type, brand, exact model and repair service.",
+      parameters: {
+        type: "object",
+        properties: {
+          deviceType: { type: "string", enum: ["Phone", "Tablet", "Laptop", "Console"] },
+          brand: { type: "string", description: "For example Apple, Samsung, Google, Apple iPad, Apple MacBook." },
+          model: { type: "string", description: "Exact model, for example iPhone 16e or Galaxy S24." },
+          service: { type: "string", description: "For example Cracked Screen, Battery Replacement, Charging Port Repair." },
+        },
+        required: ["deviceType", "brand", "model", "service"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "check_availability",
       description:
         "Check bookable check-in times for a date. Use YYYY-MM-DD. The customer must still confirm on the booking form.",
@@ -255,7 +301,7 @@ function systemPrompt(): string {
 
 Your job:
 - Answer questions about repairs, services, prices, opening hours and location.
-- Use the search_repair_prices tool before stating any price. Never invent, estimate or round a price. If no listed price matches, say a free diagnostic is needed and offer the booking page or phone.
+- Use search_repair_prices for listed price rows. When the customer gives an exact model, use estimate_repair_price for a model-specific market starting price. Never invent, estimate or round a price yourself. If neither tool has a match, say a free diagnostic is needed and offer the booking page or phone.
 - Use check_availability before saying a time is open. Only offer the times marked available. Do not claim a time is held or booked.
 - Do not create, change or cancel bookings. Direct the customer to /book, where they confirm the appointment themselves. For same-day help, tell them to call ${STORE.phone}.
 - Do not take payment card numbers or promise a repair outcome.

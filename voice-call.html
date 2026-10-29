@@ -207,13 +207,75 @@
       const errorBox = document.getElementById("error");
       const timer = document.getElementById("timer");
 
+      const TOOL_ENDPOINT =
+        location.hostname === "localhost" || location.hostname === "127.0.0.1"
+          ? "https://philly-wireless.vercel.app/api/voice/tool"
+          : "/api/voice/tool";
+
+      const TODAY = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/New_York",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).format(new Date());
+
+      const TOOLS = [
+        {
+          type: "function",
+          name: "get_store_info",
+          description: "Get the shop's address, phone, email, opening hours and repair services.",
+          parameters: { type: "object", properties: {}, required: [] }
+        },
+        {
+          type: "function",
+          name: "search_repair_prices",
+          description: "Look up live listed repair prices by device, brand or repair service. Use before quoting a listed price.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "For example: iPhone screen, iPad battery, Samsung charging port." }
+            },
+            required: ["query"]
+          }
+        },
+        {
+          type: "function",
+          name: "estimate_repair_price",
+          description: "Get a model-specific market starting price. Use after the caller gives the exact device type, brand, model and repair.",
+          parameters: {
+            type: "object",
+            properties: {
+              deviceType: { type: "string", enum: ["Phone", "Tablet", "Laptop", "Console"] },
+              brand: { type: "string", description: "For example Apple, Samsung, Google, Apple iPad, Apple MacBook." },
+              model: { type: "string", description: "Exact model, for example iPhone 16e or Galaxy S24." },
+              service: { type: "string", description: "For example Cracked Screen, Battery Replacement, Charging Port Repair." }
+            },
+            required: ["deviceType", "brand", "model", "service"]
+          }
+        },
+        {
+          type: "function",
+          name: "check_availability",
+          description: "Check bookable check-in times for a date in YYYY-MM-DD format. The caller must still confirm on /book.",
+          parameters: {
+            type: "object",
+            properties: {
+              date: { type: "string", description: "Calendar date in YYYY-MM-DD format." }
+            },
+            required: ["date"]
+          }
+        }
+      ];
+
       const INSTRUCTIONS = [
         "You are the live phone assistant for Philly Phone Repair at 1033 Chestnut Street, Philadelphia.",
-        "Phone: (814) 384-1507. Hours: Mon-Thu 9am-7pm, Fri-Sat 10am-10pm, Sun 11am-9pm.",
+        "Phone: (814) 384-1507. Use get_store_info for hours, services, address and contact details.",
+        "Always use search_repair_prices for listed prices and estimate_repair_price for a model-specific starting price.",
+        "Use check_availability before saying an appointment time is open. Never invent availability.",
+        "Current date in Philadelphia: " + TODAY + ".",
         "Answer the caller's question directly in one or two short sentences.",
         "Do not transcribe or repeat the question. Be warm, direct, and conversational.",
-        "For repair prices, give a starting range only when you know it; otherwise say a free diagnostic is needed.",
-        "Never invent availability. For booking, direct the caller to /book or the phone number.",
+        "If a lookup fails or has no match, say a free diagnostic is needed and offer /book or the phone number.",
         "Respond with interleaved text and audio."
       ].join(" ");
 
@@ -463,7 +525,42 @@
         }
       }
 
-      function handleEvent(event) {
+      async function runToolCalls(calls) {
+        generating = true;
+        waitingForReply = true;
+        autoListening = false;
+        setStatus("Checking live data…");
+        setTalkLabel("Checking", "live data");
+        for (const call of calls) {
+          const callId = call.call_id || call.id;
+          let result;
+          try {
+            const response = await fetch(TOOL_ENDPOINT, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: call.name, arguments: call.arguments || "{}" })
+            });
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            result = await response.json();
+          } catch (error) {
+            result = { error: "Live data lookup failed: " + String(error) };
+          }
+          if (!socket || socket.readyState !== WebSocket.OPEN) return;
+          socket.send(JSON.stringify({
+            type: "conversation.item.create",
+            item: {
+              type: "function_call_output",
+              call_id: callId,
+              output: JSON.stringify(result)
+            }
+          }));
+        }
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: "response.create" }));
+        }
+      }
+
+      async function handleEvent(event) {
         let message;
         try { message = JSON.parse(event.data); } catch { return; }
 
@@ -486,6 +583,8 @@
               type: "realtime",
               instructions: INSTRUCTIONS,
               output_modalities: ["text", "audio"],
+              tools: TOOLS,
+              tool_choice: "auto",
               max_output_tokens: 300
             }
           }));
@@ -526,6 +625,11 @@
         }
 
         if (message.type === "response.done") {
+          const calls = message.response?.output?.filter((item) => item.type === "function_call") || [];
+          if (calls.length) {
+            await runToolCalls(calls);
+            return;
+          }
           generating = false;
           assistantBubble = null;
           resumeListening();
@@ -558,7 +662,12 @@
           startMic();
 
           socket = new WebSocket(WS_URL);
-          socket.addEventListener("message", handleEvent);
+          socket.addEventListener("message", (event) => {
+            void handleEvent(event).catch((error) => {
+              showError("Voice event failed: " + String(error));
+              setStatus("Call error", "bad");
+            });
+          });
           socket.addEventListener("error", () => {
             showError("Cannot reach llama.cpp at 127.0.0.1:8080. Start llama-server with the audio model and --mmproj.");
             setStatus("Connection failed", "bad");
